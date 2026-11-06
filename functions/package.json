@@ -1,5 +1,5 @@
 {
-  "name": "clau dvault-functions",
+  "name": "claudvault-functions",
   "description": "OTP email functions for ClaudVault",
   "engines": {
     "node": "20"
