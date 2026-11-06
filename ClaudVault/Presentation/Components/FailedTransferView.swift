@@ -5,6 +5,7 @@ struct FailedTransferView: View {
     let errorDescription: String
 
     var onRetry: () -> Void
+    var onDelete: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: AppSpacing.md) {
@@ -24,6 +25,16 @@ struct FailedTransferView: View {
 
             Spacer()
 
+            if let onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Удалить из истории")
+            }
+
             Button(action: onRetry) {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 22))
@@ -40,6 +51,13 @@ struct FailedTransferView: View {
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.extraLarge)
                 .stroke(Color.red.opacity(0.16), lineWidth: 1)
+        }
+        .contextMenu {
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Удалить", systemImage: "trash")
+                }
+            }
         }
     }
 }

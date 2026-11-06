@@ -20,8 +20,20 @@ struct BackupListView: View {
     private let deleteBackupUseCase: DeleteBackupUseCase
     private let reparseAndBackupUseCase: ReparseAndBackupUseCase
     private let fetchBackupVersions: FetchBackupVersionsUseCase
+    /// Роутер deep link'ов виджета (`claudvault://backup/new?mode=…`).
+    private let actionRouter: BackupActionRouter?
 
     @State private var isCreateBackupPresented = false
+    @State private var isScannerPresented = false
+    /// URL PDF, сгенерированного сканером документов. Передаётся
+    /// в `CreateBackupView` как предвыбранный файл.
+    @State private var pendingScannedPDFURL: URL?
+    /// Обёртка для `sheet(item:)`: гарантирует, что `CreateBackupView`
+    /// строится с уже готовым URL скана.
+    @State private var scannedDocument: ScannedDocument?
+    /// Флаг авто-открытия fileImporter — взводится deep link'ом
+    /// `?mode=file`, sheet читает его один раз.
+    @State private var pendingAutoOpenImporter = false
 
     // MARK: - Initializer
     init(
@@ -33,7 +45,8 @@ struct BackupListView: View {
         createBackupWithUpload: CreateBackupWithUploadUseCase,
         deleteBackupUseCase: DeleteBackupUseCase,
         reparseAndBackupUseCase: ReparseAndBackupUseCase,
-        fetchBackupVersions: FetchBackupVersionsUseCase
+        fetchBackupVersions: FetchBackupVersionsUseCase,
+        actionRouter: BackupActionRouter? = nil
     ) {
         let listViewModel = BackupListViewModel(
             fetchBackupRecords: fetchBackupRecords,
@@ -52,6 +65,7 @@ struct BackupListView: View {
         self.deleteBackupUseCase = deleteBackupUseCase
         self.reparseAndBackupUseCase = reparseAndBackupUseCase
         self.fetchBackupVersions = fetchBackupVersions
+        self.actionRouter = actionRouter
     }
 
     // MARK: - Computed Properties
@@ -135,11 +149,14 @@ struct BackupListView: View {
                     .padding(.vertical, AppSpacing.screenVertical)
                 }
 
-                AddBackupButton {
-                    isCreateBackupPresented = true
-                }
+                AddBackupButton(
+                    action: { isCreateBackupPresented = true },
+                    scanAction: { isScannerPresented = true }
+                )
             }
+            #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
+            #endif
             .task {
                 viewModel.onDataChanged = { [storagesViewModel, viewModel] in
                     viewModel.loadRecords()
@@ -147,6 +164,11 @@ struct BackupListView: View {
                 }
                 viewModel.loadRecords()
                 Task { await storagesViewModel.loadStorageUsage() }
+                consumePendingBackupRequest()
+            }
+            // Deep link из виджета может прийти и после появления view.
+            .onChange(of: actionRouter?.pendingRequest) { _, _ in
+                consumePendingBackupRequest()
             }
             // Глобальный поиск по всем подключённым облакам с дебаунсом.
             .task(id: searchText) {
@@ -166,16 +188,40 @@ struct BackupListView: View {
                     storagesViewModel: storagesViewModel
                 )
             }
-            .sheet(isPresented: $isCreateBackupPresented) {
-                CreateBackupView(
-                    fileAccessRepository: fileAccessRepository,
-                    fileHasher: fileHasher,
-                    createBackupWithUpload: createBackupWithUpload,
-                    onCreated: {
-                        viewModel.loadRecords()
-                        Task { await storagesViewModel.loadStorageUsage() }
+            #if os(iOS)
+            .sheet(isPresented: $isScannerPresented, onDismiss: {
+                // После закрытия сканера открываем создание бэкапа
+                // с готовым PDF-сканом.
+                if let url = pendingScannedPDFURL {
+                    pendingScannedPDFURL = nil
+                    scannedDocument = ScannedDocument(fileURL: url)
+                }
+            }) {
+                DocumentScannerView(
+                    onScanComplete: { url in
+                        pendingScannedPDFURL = url
+                        isScannerPresented = false
+                    },
+                    onCancel: {
+                        isScannerPresented = false
+                    },
+                    onError: { error in
+                        viewModel.errorMessage = error.localizedDescription
+                        isScannerPresented = false
                     }
                 )
+            }
+            #endif
+            .sheet(isPresented: $isCreateBackupPresented, onDismiss: {
+                pendingAutoOpenImporter = false
+            }) {
+                createBackupView(
+                    initialFileURL: nil,
+                    autoOpenImporter: pendingAutoOpenImporter
+                )
+            }
+            .sheet(item: $scannedDocument) { document in
+                createBackupView(initialFileURL: document.fileURL)
             }
             .sheet(item: $selectedRecord) { record in
                 BackupRecordDetailView(
@@ -214,6 +260,48 @@ struct BackupListView: View {
                 Text(viewModel.errorMessage ?? "")
             }
         }
+    }
+
+    /// Выполняет запрос на создание бэкапа, пришедший из виджета
+    /// через deep link. Запрос снимается только здесь — если view
+    /// ещё не создан (пользователь не авторизован), он дождётся
+    /// появления этого экрана после входа.
+    private func consumePendingBackupRequest() {
+        guard let request = actionRouter?.pendingRequest else { return }
+        actionRouter?.pendingRequest = nil
+
+        switch request {
+        case .pickFile:
+            pendingAutoOpenImporter = true
+            isCreateBackupPresented = true
+        case .scanDocument:
+            isScannerPresented = true
+        }
+    }
+
+    /// Идентифицируемая обёртка для PDF из сканера — нужна для
+    /// `sheet(item:)`, чтобы content-геттер всегда получал актуальный URL.
+    private struct ScannedDocument: Identifiable {
+        let id = UUID()
+        let fileURL: URL
+    }
+
+    @ViewBuilder
+    private func createBackupView(
+        initialFileURL: URL?,
+        autoOpenImporter: Bool = false
+    ) -> some View {
+        CreateBackupView(
+            fileAccessRepository: fileAccessRepository,
+            fileHasher: fileHasher,
+            createBackupWithUpload: createBackupWithUpload,
+            initialFileURL: initialFileURL,
+            autoOpenImporter: autoOpenImporter,
+            onCreated: {
+                viewModel.loadRecords()
+                Task { await storagesViewModel.loadStorageUsage() }
+            }
+        )
     }
 
     private func makeDetailViewModel(for record: BackupRecord) -> BackupVersionsViewModel {

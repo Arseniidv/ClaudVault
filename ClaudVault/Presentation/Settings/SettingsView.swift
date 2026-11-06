@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var authViewModel: AuthViewModel
+    var deviceTransferCoordinator: DeviceTransferCoordinator?
 
     @State private var automaticBackupEnabled = false
     @State private var notificationsEnabled = true
@@ -55,6 +56,37 @@ struct SettingsView: View {
                     )
                     emailVerificationRow
 
+                    if let deviceTransferCoordinator {
+                        Button {
+                            deviceTransferCoordinator.open()
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "qrcode.viewfinder")
+                                    .font(.system(size: 17))
+                                    .foregroundStyle(.cyan)
+                                    .frame(width: 36, height: 36)
+
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Перенос на другое устройство")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundStyle(.white)
+
+                                    Text("QR-код для переноса облачных подключений")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.white.opacity(0.5))
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.35))
+                            }
+                            .padding(14)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     SettingsToggleRow(
                         title: "Двухфакторная верификация",
                         subtitle: twoFactorEnabled
@@ -87,43 +119,10 @@ struct SettingsView: View {
                     )
                 }
 
-                Button {
-                    showAbout = true
-                } label: {
-                    Label("О приложении", systemImage: "info.circle")
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(Color.white.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
+                aboutButton
 
                 if authViewModel.currentUser != nil {
-                    Button {
-                        Task {
-                            await authViewModel.signOut()
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            if authViewModel.isLoading {
-                                ProgressView()
-                                    .tint(.red)
-                            } else {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .font(.system(size: 17))
-                            }
-
-                            Text("Выйти из аккаунта")
-                                .font(.system(size: 15, weight: .medium))
-                        }
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(Color.red.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(authViewModel.isLoading)
+                    signOutButton
                 }
 
                 SettingsFooterView()
@@ -132,7 +131,9 @@ struct SettingsView: View {
         }
         .background(Color(red: 0.035, green: 0.045, blue: 0.075))
         .navigationTitle("Настройки")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .alert("CloudVault", isPresented: $showAbout) {
             Button("Закрыть", role: .cancel) {}
         } message: {
@@ -156,7 +157,9 @@ struct SettingsView: View {
         }
         .alert("Код подтверждения", isPresented: $authViewModel.isOTPEntryPresented) {
             TextField("000000", text: $otpCode)
+                #if os(iOS)
                 .keyboardType(.numberPad)
+                #endif
 
             Button("Подтвердить") {
                 let code = otpCode
@@ -172,6 +175,47 @@ struct SettingsView: View {
         } message: {
             Text("Введите 6-значный код из письма, отправленного на вашу почту.")
         }
+    }
+
+    private var aboutButton: some View {
+        Button {
+            showAbout = true
+        } label: {
+            Label("О приложении", systemImage: "info.circle")
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(Color.white.opacity(0.05))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private var signOutButton: some View {
+        Button {
+            Task {
+                await authViewModel.signOut()
+            }
+        } label: {
+            HStack(spacing: 12) {
+                if authViewModel.isLoading {
+                    ProgressView()
+                        .tint(.red)
+                } else {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 17))
+                }
+
+                Text("Выйти из аккаунта")
+                    .font(.system(size: 15, weight: .medium))
+            }
+            .foregroundStyle(.red)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color.red.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .disabled(authViewModel.isLoading)
     }
 
     /// Подтверждение email через ссылку из письма (passwordless Firebase).

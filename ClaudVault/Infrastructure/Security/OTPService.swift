@@ -4,11 +4,15 @@ import FirebaseFunctions
 enum OTPServiceError: LocalizedError {
     /// Callable-функция не развёрнута в Firebase-проекте.
     case functionNotDeployed
+    /// Сервер не вернул срок действия доверенного окна.
+    case invalidResponse
 
     var errorDescription: String? {
         switch self {
         case .functionNotDeployed:
             return "Сервис подтверждения не развёрнут на сервере. Необходимо выполнить deploy Cloud Functions."
+        case .invalidResponse:
+            return "Некорректный ответ сервера подтверждения."
         }
     }
 }
@@ -68,8 +72,11 @@ final class OTPService {
         }
 
         let data = result.data as? [String: Any]
-        let validUntil = (data?["validUntil"] as? NSNumber)?.doubleValue
-            ?? Date().timeIntervalSince1970 + 15 * 60
+        // Без валидного срока от сервера доверенное окно не открываем —
+        // подставлять «примерные 15 минут» на клиенте нельзя.
+        guard let validUntil = (data?["validUntil"] as? NSNumber)?.doubleValue else {
+            throw OTPServiceError.invalidResponse
+        }
         UserDefaults.standard.set(validUntil, forKey: Self.verifiedUntilKey)
     }
 }

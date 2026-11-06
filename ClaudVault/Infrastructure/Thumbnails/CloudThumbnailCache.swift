@@ -6,7 +6,7 @@ import Foundation
 /// `Caches/CloudThumbnails/` и переиспользуются между запусками,
 /// чтобы списки файлов не тянули тяжёлые исходники из облака.
 /// Поверх этого кэша Kingfisher держит декодированные изображения.
-final class CloudThumbnailCache {
+nonisolated final class CloudThumbnailCache {
 
     static let shared = CloudThumbnailCache()
 

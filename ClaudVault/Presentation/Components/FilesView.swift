@@ -78,9 +78,7 @@ struct FilesView: View {
                 .padding(.vertical, AppSpacing.screenVertical)
             }
 
-            AddBackupButton {
-                onAddBackup()
-            }
+            AddBackupButton(action: onAddBackup)
             .padding(.trailing, AppSpacing.screenHorizontal)
             .padding(.bottom, AppSpacing.xl)
         }

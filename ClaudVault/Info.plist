@@ -48,11 +48,27 @@
 				<string>msauth.my.ClaudVault</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>DeviceTransfer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>claudvault</string>
+			</array>
+		</dict>
 	</array>
 	<key>OneDriveClientID</key>
 	<string></string>
 	<key>GIDClientID</key>
 	<string>575975024987-4d88apu4ivqjufbhioi2bvcogdki3523.apps.googleusercontent.com</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна, чтобы отсканировать QR-код переноса подключений с другого устройства.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>dbapi-2</string>

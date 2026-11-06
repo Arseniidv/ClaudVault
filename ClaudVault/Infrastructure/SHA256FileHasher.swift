@@ -3,14 +3,14 @@ import CryptoKit
 
 final class SHA256FileHasher: FileHashing {
     
-    func hashFile(at url: URL) throws -> String {
+    nonisolated func hashFile(at url: URL) throws -> String {
         return try sha256(of: url)
     }
     
 
     private let chunkSize = 1_048_576 // 1 MB
 
-    func sha256(of fileURL: URL) throws -> String {
+    nonisolated func sha256(of fileURL: URL) throws -> String {
 
         let fileHandle = try FileHandle(forReadingFrom: fileURL)
         defer {

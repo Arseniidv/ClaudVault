@@ -1,12 +1,19 @@
 import Foundation
 import Security
 
-/// Минимальное key-value хранилище поверх Keychain
-/// для токенов OneDrive (access/refresh).
+/// Keychain-хранилище токенов OneDrive (access/refresh).
+///
+/// Записи лежат в едином сервисе `com.claudvault.storage.auth`
+/// через `KeychainItemStore` — с `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`
+/// и Data Protection Keychain на macOS. При первом обращении
+/// выполняется разовый перенос из легаси-сервиса
+/// `my.ClaudVault.onedrive`.
 struct OneDriveTokenStore {
 
-    private let service = "my.ClaudVault.onedrive"
-    private let account = "tokens"
+    private static let account = "onedrive|tokens"
+    private static let legacyService = "my.ClaudVault.onedrive"
+    private static let legacyAccount = "tokens"
+    private static let migrationFlagKey = "OneDriveKeychainMigrationV1"
 
     struct StoredTokens: Codable {
         var accessToken: String
@@ -16,50 +23,67 @@ struct OneDriveTokenStore {
     }
 
     func load() -> StoredTokens? {
+        if let data = KeychainItemStore.load(account: Self.account),
+           let tokens = try? JSONDecoder().decode(StoredTokens.self, from: data) {
+            return tokens
+        }
+        return loadLegacyAndMigrate()
+    }
+
+    func save(_ tokens: StoredTokens) {
+        guard let data = try? JSONEncoder().encode(tokens) else { return }
+        try? KeychainItemStore.save(data, account: Self.account)
+    }
+
+    func delete() {
+        try? KeychainItemStore.delete(account: Self.account)
+    }
+
+    /// Одноразовый перенос токенов из легаси Keychain-сервиса
+    /// `my.ClaudVault.onedrive` в единое хранилище.
+    /// На macOS легаси-айтемы лежат в файловой связке ключей,
+    /// поэтому запрос к ним идёт без `kSecUseDataProtectionKeychain`.
+    private func loadLegacyAndMigrate() -> StoredTokens? {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.migrationFlagKey) else {
+            return nil
+        }
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrService as String: Self.legacyService,
+            kSecAttrAccount as String: Self.legacyAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else {
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        // Флаг ставим только при однозначном ответе Keychain:
+        // айтем найден (мигрируем) или его нет (мигрировать нечего).
+        // При прочих ошибках (например, `errSecInteractionNotAllowed`
+        // на заблокированном устройстве) миграция повторится
+        // при следующем обращении.
+        guard status == errSecSuccess || status == errSecItemNotFound else {
             return nil
         }
-        return try? JSONDecoder().decode(StoredTokens.self, from: data)
-    }
+        defaults.set(true, forKey: Self.migrationFlagKey)
 
-    func save(_ tokens: StoredTokens) {
-        guard let data = try? JSONEncoder().encode(tokens) else { return }
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-        ]
-
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if status == errSecItemNotFound {
-            var insert = query
-            insert.merge(attributes) { _, new in new }
-            SecItemAdd(insert as CFDictionary, nil)
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let tokens = try? JSONDecoder().decode(
+                  StoredTokens.self, from: data
+              ) else {
+            return nil
         }
-    }
 
-    func delete() {
-        let query: [String: Any] = [
+        try? KeychainItemStore.save(data, account: Self.account)
+        SecItemDelete([
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-        SecItemDelete(query as CFDictionary)
+            kSecAttrService as String: Self.legacyService,
+            kSecAttrAccount as String: Self.legacyAccount
+        ] as CFDictionary)
+        return tokens
     }
 }

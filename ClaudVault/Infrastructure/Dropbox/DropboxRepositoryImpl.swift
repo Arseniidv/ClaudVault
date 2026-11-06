@@ -55,10 +55,14 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
         } catch let error as CallError<Files.ListFolderError> {
+            #if DEBUG
             print("[Dropbox] listFolder(path: \(path)) failed: \(error)")
+            #endif
             throw DropboxAuthManager.mapError(error)
         } catch let error as CallError<Files.ListFolderContinueError> {
+            #if DEBUG
             print("[Dropbox] listFolderContinue failed: \(error)")
+            #endif
             throw DropboxAuthManager.mapError(error)
         }
     }

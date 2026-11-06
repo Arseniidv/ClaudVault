@@ -18,7 +18,9 @@ struct ProfileView: View {
                 .ignoresSafeArea()
         )
         .navigationTitle("Профиль")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .alert(
             "Профиль обновлён",
             isPresented: $viewModel.showSaveConfirmation
@@ -198,9 +200,11 @@ struct ProfileView: View {
                 TextField(title, text: value)
                     .font(.system(size: 14))
                     .foregroundStyle(.white)
+                    #if os(iOS)
                     .textInputAutocapitalization(
                         title == "Имя" ? .words : .never
                     )
+                    #endif
                     .autocorrectionDisabled()
             } else {
                 Text(value.wrappedValue)

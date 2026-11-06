@@ -2,7 +2,7 @@ import Foundation
 
 final class LocalFileAccess: FileAccessRepository {
 
-    func withAccess<T>(
+    nonisolated func withAccess<T>(
         to url: URL,
         perform operation: (URL) throws -> T
     ) throws -> T {

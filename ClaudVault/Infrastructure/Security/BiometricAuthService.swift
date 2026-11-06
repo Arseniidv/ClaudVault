@@ -29,6 +29,50 @@ final class BiometricAuthService {
         }
     }
 
+    /// Аутентификация для чувствительных операций (например, передача
+    /// токенов на другое устройство): требует биометрию и НЕ
+    /// предлагает пароль устройства, если биометрия настроена.
+    /// Пароль допускается только когда биометрии нет вовсе или она
+    /// в lockout — иначе операцию нельзя было бы выполнить вообще.
+    func authenticateForSensitiveOperation(reason: String) async throws -> Bool {
+        var context = LAContext()
+        context.localizedCancelTitle = "Отмена"
+        context.localizedFallbackTitle = "Ввести пароль"
+
+        var probeError: NSError?
+        let hasBiometrics = context.canEvaluatePolicy(
+            .deviceOwnerAuthenticationWithBiometrics,
+            error: &probeError
+        )
+
+        if hasBiometrics {
+            do {
+                return try await context.evaluatePolicy(
+                    .deviceOwnerAuthenticationWithBiometrics,
+                    localizedReason: reason
+                )
+            } catch let error as NSError {
+                // Lockout биометрии: без пароля устройства пользователь
+                // вообще не сможет подтвердить операцию — разрешаем fallback.
+                guard error.code == LAError.biometryLockout.rawValue else {
+                    throw mapError(error)
+                }
+            }
+        }
+
+        context = LAContext()
+        context.localizedCancelTitle = "Отмена"
+        context.localizedFallbackTitle = "Ввести пароль"
+        do {
+            return try await context.evaluatePolicy(
+                .deviceOwnerAuthentication,
+                localizedReason: reason
+            )
+        } catch {
+            throw mapError(error as NSError)
+        }
+    }
+
     func authenticate() async throws -> Bool {
         let context = LAContext()
         context.localizedCancelTitle = "Отмена"

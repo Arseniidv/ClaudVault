@@ -89,7 +89,7 @@ enum StorageProviderType: String, CaseIterable, Identifiable, Codable {
         case .oneDrive: return .blue
         case .iCloud: return .cyan
         case .googleDrive: return .green
-        case .dropbox: return .indigo
+        case .dropbox: return .purple
         case .unknown: return .secondary
         }
     }

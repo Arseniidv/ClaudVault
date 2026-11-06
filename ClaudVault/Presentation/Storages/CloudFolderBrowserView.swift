@@ -54,12 +54,16 @@ struct CloudFolderBrowserView: View {
             }
         }
         .navigationTitle(route.folderName)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
+        #if os(iOS)
         .toolbarBackground(
             Color(red: 0.035, green: 0.047, blue: 0.075),
             for: .navigationBar
         )
         .toolbarColorScheme(.dark, for: .navigationBar)
+        #endif
         .navigationDestination(for: CloudFolderRoute.self) { childRoute in
             CloudFolderBrowserView(
                 provider: childRoute.provider,
@@ -205,6 +209,7 @@ struct CloudFolderBrowserView: View {
                 parentFolderID: route.folderID
             )
         } catch {
+            #if DEBUG
             print(
                 "[CloudFolderBrowser] listFiles failed — "
                     + "provider=\(provider.rawValue) "
@@ -212,6 +217,7 @@ struct CloudFolderBrowserView: View {
                     + "folderName=\(route.folderName) "
                     + "error=\(error)"
             )
+            #endif
             loadError = "\(provider.name): \(error.localizedDescription)"
         }
     }

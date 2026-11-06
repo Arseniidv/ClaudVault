@@ -88,6 +88,21 @@ final class SynchronizationViewModel {
         pollingTask = nil
     }
 
+    // MARK: - Delete
+
+    /// Удаляет сессию передачи из истории — любого статуса
+    /// (активная, failed, completed).
+    func deleteSession(id: UUID) {
+        Task {
+            do {
+                try await updateUploadProgress.executeDelete(id: id)
+                await refresh()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     // MARK: - Retry
 
     /// Повторяет неудавшуюся передачу: повторный анализ записи

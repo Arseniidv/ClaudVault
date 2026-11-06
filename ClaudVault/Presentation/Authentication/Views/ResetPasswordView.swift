@@ -15,6 +15,9 @@ struct ResetPasswordView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var email = ""
+    @State private var resetCode = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
 
     var body: some View {
         ScrollView {
@@ -29,6 +32,10 @@ struct ResetPasswordView: View {
                     text: $email
                 )
 
+                if authViewModel.isResetCodeSent {
+                    codeSection
+                }
+
                 if let error = authViewModel.errorMessage {
                     messageRow(text: error, color: .red)
                 }
@@ -37,7 +44,13 @@ struct ResetPasswordView: View {
                     messageRow(text: success, color: .green)
                 }
 
-                sendButton
+                if authViewModel.isResetCodeSent {
+                    confirmButton
+                    resendButton
+                } else {
+                    sendButton
+                }
+
                 supportButton
                 backButton
             }
@@ -48,7 +61,9 @@ struct ResetPasswordView: View {
                 .ignoresSafeArea()
         }
         .navigationTitle("Сброс пароля")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onAppear {
             authViewModel.clearMessages()
         }
@@ -88,10 +103,37 @@ struct ResetPasswordView: View {
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(.white)
 
-            Text("Мы отправим письмо со ссылкой для смены пароля на указанный адрес.")
+            Text(authViewModel.isResetCodeSent
+                 ? "Введите 6-значный код из письма и придумайте новый пароль."
+                 : "Мы отправим код для сброса пароля на указанный адрес через Gmail.")
                 .font(.system(size: 14))
                 .foregroundStyle(.white.opacity(0.55))
                 .multilineTextAlignment(.center)
+        }
+    }
+
+    // MARK: - Step 2: code + new password
+
+    private var codeSection: some View {
+        VStack(spacing: 16) {
+            AuthTextField(
+                title: "Код из письма",
+                placeholder: "000000",
+                systemImage: "number",
+                text: $resetCode
+            )
+
+            AuthPasswordField(
+                title: "Новый пароль",
+                placeholder: "Минимум 12 символов",
+                password: $newPassword
+            )
+
+            AuthPasswordField(
+                title: "Повторите пароль",
+                placeholder: "Введите пароль ещё раз",
+                password: $confirmPassword
+            )
         }
     }
 
@@ -100,7 +142,7 @@ struct ResetPasswordView: View {
     private var sendButton: some View {
         Button {
             Task {
-                await authViewModel.resetPassword(email: email)
+                await authViewModel.requestPasswordResetCode(email: email)
             }
         } label: {
             HStack(spacing: 10) {
@@ -108,7 +150,7 @@ struct ResetPasswordView: View {
                     ProgressView()
                         .tint(.white)
                 } else {
-                    Text("Отправить письмо")
+                    Text("Отправить код")
                         .font(.system(size: 16, weight: .semibold))
                 }
             }
@@ -122,16 +164,63 @@ struct ResetPasswordView: View {
         .disabled(authViewModel.isLoading)
     }
 
-    // MARK: - Support Button (TEST)
+    private var confirmButton: some View {
+        Button {
+            guard newPassword == confirmPassword else {
+                authViewModel.errorMessage = "Пароли не совпадают."
+                return
+            }
+            Task {
+                await authViewModel.confirmPasswordReset(
+                    email: email,
+                    code: resetCode,
+                    newPassword: newPassword
+                )
+            }
+        } label: {
+            HStack(spacing: 10) {
+                if authViewModel.isLoading {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Text("Сохранить новый пароль")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.blue.opacity(0.85))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .disabled(authViewModel.isLoading)
+    }
+
+    private var resendButton: some View {
+        Button {
+            resetCode = ""
+            newPassword = ""
+            confirmPassword = ""
+            Task {
+                await authViewModel.requestPasswordResetCode(email: email)
+            }
+        } label: {
+            Text("Отправить код повторно")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Color.blue.opacity(0.9))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+        }
+        .buttonStyle(.plain)
+        .disabled(authViewModel.isLoading)
+    }
+
+    // MARK: - Support Button
 
     private var supportButton: some View {
         Button {
-            print("Support button tapped")
-            print("Opening MailComposer sheet...")
-
-            // Временно открываем sheet без проверки почты
             isMailPresented = true
-
         } label: {
             Label(
                 "Связаться с поддержкой",

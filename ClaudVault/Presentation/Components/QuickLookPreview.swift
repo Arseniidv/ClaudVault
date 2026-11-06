@@ -1,8 +1,28 @@
 import SwiftUI
+#if os(iOS)
 import QuickLook
+#elseif os(macOS)
+import Quartz
+#endif
 
 /// Обёртка QuickLook для просмотра скачанного облачного файла.
-struct QuickLookPreview: UIViewControllerRepresentable {
+struct QuickLookPreview: View {
+    let url: URL
+
+    var body: some View {
+        #if os(iOS)
+        IOSQuickLookPreview(url: url)
+        #else
+        MacQuickLookPreview(url: url)
+        #endif
+    }
+}
+
+// MARK: - iOS
+
+#if os(iOS)
+
+private struct IOSQuickLookPreview: UIViewControllerRepresentable {
     let url: URL
 
     func makeUIViewController(context: Context) -> QLPreviewController {
@@ -39,3 +59,27 @@ struct QuickLookPreview: UIViewControllerRepresentable {
         }
     }
 }
+
+#endif
+
+// MARK: - macOS
+
+#if os(macOS)
+
+private struct MacQuickLookPreview: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> NSView {
+        guard let view = QLPreviewView(frame: .zero, style: .normal) else {
+            return NSView()
+        }
+        view.previewItem = url as NSURL
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? QLPreviewView)?.previewItem = url as NSURL
+    }
+}
+
+#endif
