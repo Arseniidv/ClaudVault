@@ -10,6 +10,10 @@ struct RootView: View {
     @State private var selectedTab: AppTab = .files
     @AppStorage("biometricLockEnabled") private var biometricLockEnabled = false
     @State private var isAppLocked = false
+    /// Роутер deep link'ов создания бэкапа из виджета.
+    /// Живёт в RootView, чтобы пережить экран входа: запрос
+    /// исполнится, когда `BackupListView` появится после авторизации.
+    @State private var backupActionRouter = BackupActionRouter()
     /// Приложение уже было разблокировано в этой сессии (нет смысла
     /// запирать повторно при каждом scenePhase → .active).
     @State private var hasUnlockedThisSession = false
@@ -83,7 +87,36 @@ struct RootView: View {
             authViewModel.handleIncomingURL(url)
             // OAuth-колбэк Google Sign-In.
             dependencies.googleOAuthManager.handleURL(url)
+            // QR-ссылка переноса подключений между устройствами.
+            dependencies.deviceTransferCoordinator.handleIncomingURL(url)
+            // Deep link из виджета хранилищ: claudvault://storage/{provider}
+            handleStorageDeepLink(url)
+            // Deep link создания бэкапа из виджета:
+            // claudvault://backup/new?mode=file|scan
+            handleBackupCreationDeepLink(url)
         }
+    }
+
+    /// Открывает раздел «Хранилища» по deep link виджета.
+    /// Если в URL указан провайдер — выбирает его в ViewModel.
+    private func handleStorageDeepLink(_ url: URL) {
+        guard let link = StorageDeepLink.parse(url) else { return }
+
+        selectedTab = .storages
+
+        if let provider = link.provider,
+           storagesViewModel.availableProviders.contains(provider) {
+            storagesViewModel.selectedProvider = provider
+        }
+    }
+
+    /// Открывает создание резервной копии по deep link виджета.
+    /// Само действие (пикер файла / сканер) выполнит
+    /// `BackupListView` через `backupActionRouter`.
+    private func handleBackupCreationDeepLink(_ url: URL) {
+        guard let link = BackupCreationDeepLink.parse(url) else { return }
+        selectedTab = .files
+        backupActionRouter.request(link.request)
     }
     private var mainAppView: some View {
         TabView(selection: $selectedTab) {
@@ -96,7 +129,8 @@ struct RootView: View {
                 createBackupWithUpload: dependencies.createBackupWithUpload,
                 deleteBackupUseCase: dependencies.deleteBackup,
                 reparseAndBackupUseCase: dependencies.reparseAndBackup,
-                fetchBackupVersions: dependencies.fetchBackupVersions
+                fetchBackupVersions: dependencies.fetchBackupVersions,
+                actionRouter: backupActionRouter
             )
             .tabItem {
                 Label(
@@ -143,7 +177,10 @@ struct RootView: View {
             // MARK: - Settings
 
             NavigationStack {
-                SettingsView(authViewModel: authViewModel)
+                SettingsView(
+                    authViewModel: authViewModel,
+                    deviceTransferCoordinator: dependencies.deviceTransferCoordinator
+                )
             }
             .tabItem {
                 Label(
@@ -154,6 +191,14 @@ struct RootView: View {
                 )
             }
             .tag(AppTab.settings)
+        }
+        .sheet(isPresented: Binding(
+            get: { dependencies.deviceTransferCoordinator.isPresented },
+            set: { dependencies.deviceTransferCoordinator.isPresented = $0 }
+        )) {
+            DeviceTransferView(
+                viewModel: dependencies.makeDeviceTransferViewModel()
+            )
         }
     }
 }

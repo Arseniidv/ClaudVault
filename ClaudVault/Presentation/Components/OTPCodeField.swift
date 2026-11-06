@@ -10,7 +10,9 @@ struct OTPCodeField: View {
 
     var body: some View {
         TextField("000000", text: $code)
+            #if os(iOS)
             .keyboardType(.numberPad)
+            #endif
             .multilineTextAlignment(.center)
             .font(.system(size: 28, weight: .bold, design: .monospaced))
             .foregroundStyle(.white)

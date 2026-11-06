@@ -37,7 +37,9 @@ struct StoragesView: View {
         }
         .background(Color(red: 0.035, green: 0.04, blue: 0.055))
         .navigationTitle("Хранилища")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .sheet(isPresented: $showingAddStorage) {
             addStorageSheet
         }
@@ -116,9 +118,13 @@ struct StoragesView: View {
             .padding(24)
             .background(Color(red: 0.035, green: 0.04, blue: 0.055).ignoresSafeArea())
             .navigationTitle("Двухфакторная защита")
-            .navigationBarTitleDisplayMode(.inline)
+            #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         }
+        #if os(iOS)
         .presentationDetents([.medium])
+        #endif
     }
 
     // MARK: - Header
@@ -166,20 +172,43 @@ struct StoragesView: View {
             }
 
             GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.08))
+                HStack(spacing: 0) {
+                    ForEach(providers) { provider in
+                        let fraction = totalCapacity > 0
+                            ? provider.usedStorage / totalCapacity : 0
+                        let segmentWidth = geometry.size.width * CGFloat(fraction)
 
-                    Capsule()
-                        .fill(Color.blue)
-                        .frame(
-                            width: totalCapacity > 0
-                                ? geometry.size.width * min(totalUsed / totalCapacity, 1)
-                                : 0
-                        )
+                        if segmentWidth > 0 {
+                            Rectangle()
+                                .fill(provider.tint)
+                                .frame(width: segmentWidth)
+                        }
+                    }
+
+                    let freeFraction = totalCapacity > 0
+                        ? max(totalCapacity - totalUsed, 0) / totalCapacity : 1
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: geometry.size.width * CGFloat(freeFraction))
                 }
             }
             .frame(height: 9)
+            .clipShape(Capsule())
+
+            HStack(spacing: 16) {
+                ForEach(providers) { provider in
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(provider.tint)
+                            .frame(width: 6, height: 6)
+
+                        Text("\(provider.name): \(provider.usedStorage.formatted(.number.precision(.fractionLength(1)))) GB")
+                    }
+                }
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.white.opacity(0.6))
 
             Text("Использовано \(totalCapacity > 0 ? Int(totalUsed / totalCapacity * 100) : 0)% доступного пространства")
                 .font(.system(size: 12))
@@ -248,7 +277,9 @@ struct StoragesView: View {
             }
             .background(Color(red: 0.035, green: 0.04, blue: 0.055).ignoresSafeArea())
             .navigationTitle(viewModel.activeAccount == nil ? "Подключение" : viewModel.selectedProvider.name)
-            .navigationBarTitleDisplayMode(.inline)
+            #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Готово") {

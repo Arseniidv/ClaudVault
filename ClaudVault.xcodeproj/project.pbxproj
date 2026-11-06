@@ -14,6 +14,10 @@
 		B556ECD2309CF59100BFC644 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = B50A5833309CE4CE00AA12A8 /* GoogleSignIn */; };
 		B556ECD3309CF59100BFC644 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = B50A5834309CE4CE00AA12A8 /* FirebaseFunctions */; };
 		B556ECD4309CF59100BFC644 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = B50A5836309CE4CE00AA12A8 /* Kingfisher */; };
+		B556ECD5309CF5A100BFC644 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B50A5837309CE4CE00AA12A8 /* FirebaseFirestore */; };
+		B59F4976309E3123003ED35C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B59F4975309E3123003ED35C /* WidgetKit.framework */; };
+		B59F4978309E3123003ED35C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B59F4977309E3123003ED35C /* SwiftUI.framework */; };
+		B59F4985309E3125003ED35C /* CloudVaultWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B59F4973309E3123003ED35C /* CloudVaultWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -31,16 +35,47 @@
 			remoteGlobalIDString = B520B1853093D28900A2902F;
 			remoteInfo = ClaudVault;
 		};
+		B59F4983309E3125003ED35C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B520B17E3093D28900A2902F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B59F4972309E3123003ED35C;
+			remoteInfo = CloudVaultWidgetExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B59F498A309E3125003ED35C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "";
+			dstSubfolder = PlugIns;
+			files = (
+				B59F4985309E3125003ED35C /* CloudVaultWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		B520B1863093D28900A2902F /* ClaudVault.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudVault.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B520B1953093D28B00A2902F /* ClaudVaultTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudVaultTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B520B19F3093D28B00A2902F /* ClaudVaultUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudVaultUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B556ECCC309CF48D00BFC644 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		B59F4973309E3123003ED35C /* CloudVaultWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CloudVaultWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B59F4975309E3123003ED35C /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = /System/Library/Frameworks/WidgetKit.framework; sourceTree = "<absolute>"; };
+		B59F4977309E3123003ED35C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = /System/Library/Frameworks/SwiftUI.framework; sourceTree = "<absolute>"; };
+		B5AA11CE0000000000000002 /* ClaudVaultIOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClaudVaultIOS.entitlements; sourceTree = "<group>"; };
+		B5C832D6309E33B30080FAEA /* CloudVaultWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CloudVaultWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B59F4989309E3125003ED35C /* Exceptions for "CloudVaultWidget" folder in "CloudVaultWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B59F4972309E3123003ED35C /* CloudVaultWidgetExtension */;
+		};
 		B5A5A09630964918004724A1 /* Exceptions for "ClaudVault" folder in "ClaudVault" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -70,6 +105,19 @@
 			path = ClaudVaultUITests;
 			sourceTree = "<group>";
 		};
+		B59F4979309E3123003ED35C /* CloudVaultWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B59F4989309E3125003ED35C /* Exceptions for "CloudVaultWidget" folder in "CloudVaultWidgetExtension" target */,
+			);
+			path = CloudVaultWidget;
+			sourceTree = "<group>";
+		};
+		B5AA11CE0000000000000001 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +130,7 @@
 				B556ECD1309CF59100BFC644 /* SwiftyDropbox in Frameworks */,
 				B556ECD0309CF59100BFC644 /* FirebaseAuth in Frameworks */,
 				B556ECCF309CF59100BFC644 /* FirebaseCore in Frameworks */,
+				B556ECD5309CF5A100BFC644 /* FirebaseFirestore in Frameworks */,
 			);
 		};
 		B520B1923093D28B00A2902F /* Frameworks */ = {
@@ -94,16 +143,28 @@
 			files = (
 			);
 		};
+		B59F4970309E3123003ED35C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				B59F4978309E3123003ED35C /* SwiftUI.framework in Frameworks */,
+				B59F4976309E3123003ED35C /* WidgetKit.framework in Frameworks */,
+			);
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		B520B17D3093D28900A2902F = {
 			isa = PBXGroup;
 			children = (
+				B5AA11CE0000000000000002 /* ClaudVaultIOS.entitlements */,
+				B5C832D6309E33B30080FAEA /* CloudVaultWidgetExtension.entitlements */,
 				B520B1883093D28900A2902F /* ClaudVault */,
 				B520B1983093D28B00A2902F /* ClaudVaultTests */,
 				B520B1A23093D28B00A2902F /* ClaudVaultUITests */,
 				B556ECCC309CF48D00BFC644 /* GoogleService-Info.plist */,
+				B59F4979309E3123003ED35C /* CloudVaultWidget */,
+				B5AA11CE0000000000000001 /* Shared */,
+				B59F4974309E3123003ED35C /* Frameworks */,
 				B520B1873093D28900A2902F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -114,8 +175,18 @@
 				B520B1863093D28900A2902F /* ClaudVault.app */,
 				B520B1953093D28B00A2902F /* ClaudVaultTests.xctest */,
 				B520B19F3093D28B00A2902F /* ClaudVaultUITests.xctest */,
+				B59F4973309E3123003ED35C /* CloudVaultWidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B59F4974309E3123003ED35C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B59F4975309E3123003ED35C /* WidgetKit.framework */,
+				B59F4977309E3123003ED35C /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -128,11 +199,16 @@
 				B520B1823093D28900A2902F /* Sources */,
 				B520B1833093D28900A2902F /* Frameworks */,
 				B520B1843093D28900A2902F /* Resources */,
+				B59F498A309E3125003ED35C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
+			dependencies = (
+				B59F4984309E3125003ED35C /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				B520B1883093D28900A2902F /* ClaudVault */,
+				B5AA11CE0000000000000001 /* Shared */,
 			);
 			name = ClaudVault;
 			packageProductDependencies = (
@@ -142,6 +218,7 @@
 				B50A5833309CE4CE00AA12A8 /* GoogleSignIn */,
 				B50A5834309CE4CE00AA12A8 /* FirebaseFunctions */,
 				B50A5836309CE4CE00AA12A8 /* Kingfisher */,
+				B50A5837309CE4CE00AA12A8 /* FirebaseFirestore */,
 			);
 			productName = ClaudVault;
 			productReference = B520B1863093D28900A2902F /* ClaudVault.app */;
@@ -189,6 +266,25 @@
 			productReference = B520B19F3093D28B00A2902F /* ClaudVaultUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		B59F4972309E3123003ED35C /* CloudVaultWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B59F4986309E3125003ED35C /* Build configuration list for PBXNativeTarget "CloudVaultWidgetExtension" */;
+			buildPhases = (
+				B59F496F309E3123003ED35C /* Sources */,
+				B59F4970309E3123003ED35C /* Frameworks */,
+				B59F4971309E3123003ED35C /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				B59F4979309E3123003ED35C /* CloudVaultWidget */,
+				B5AA11CE0000000000000001 /* Shared */,
+			);
+			name = CloudVaultWidgetExtension;
+			productName = CloudVaultWidgetExtension;
+			productReference = B59F4973309E3123003ED35C /* CloudVaultWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -196,7 +292,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2710;
+				LastSwiftUpdateCheck = 2720;
 				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					B520B1853093D28900A2902F = {
@@ -209,6 +305,9 @@
 					B520B19E3093D28B00A2902F = {
 						CreatedOnToolsVersion = 27.1;
 						TestTargetID = B520B1853093D28900A2902F;
+					};
+					B59F4972309E3123003ED35C = {
+						CreatedOnToolsVersion = 27.2;
 					};
 				};
 			};
@@ -235,6 +334,7 @@
 				B520B1853093D28900A2902F /* ClaudVault */,
 				B520B1943093D28B00A2902F /* ClaudVaultTests */,
 				B520B19E3093D28B00A2902F /* ClaudVaultUITests */,
+				B59F4972309E3123003ED35C /* CloudVaultWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -252,6 +352,11 @@
 			);
 		};
 		B520B19D3093D28B00A2902F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		B59F4971309E3123003ED35C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -274,6 +379,11 @@
 			files = (
 			);
 		};
+		B59F496F309E3123003ED35C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -286,6 +396,11 @@
 			isa = PBXTargetDependency;
 			target = B520B1853093D28900A2902F /* ClaudVault */;
 			targetProxy = B520B1A03093D28B00A2902F /* PBXContainerItemProxy */;
+		};
+		B59F4984309E3125003ED35C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B59F4972309E3123003ED35C /* CloudVaultWidgetExtension */;
+			targetProxy = B59F4983309E3125003ED35C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -417,6 +532,8 @@
 				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=iphoneos*]" = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = ClaudVaultIOS.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = ClaudVaultIOS.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = ClaudVault.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -430,6 +547,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ClaudVault/Info.plist;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Камера используется для сканирования QR-кода переноса подключений между устройствами";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Используется для безопасного входа в приложение";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -468,6 +586,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = ClaudVaultIOS.entitlements;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = ClaudVaultIOS.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = ClaudVault.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -481,6 +601,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ClaudVault/Info.plist;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Камера используется для сканирования QR-кода переноса подключений между устройствами";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Используется для безопасного входа в приложение";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -619,6 +740,94 @@
 			};
 			name = Release;
 		};
+		B59F4987309E3125003ED35C /* Debug configuration for PBXNativeTarget "CloudVaultWidgetExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = CloudVaultWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QJZ6Q2G3QQ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CloudVaultWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CloudVaultWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = my.ClaudVault.CloudVaultWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 27.2;
+			};
+			name = Debug;
+		};
+		B59F4988309E3125003ED35C /* Release configuration for PBXNativeTarget "CloudVaultWidgetExtension" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = CloudVaultWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QJZ6Q2G3QQ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CloudVaultWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = CloudVaultWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 27.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = my.ClaudVault.CloudVaultWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 27.2;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -651,6 +860,14 @@
 			buildConfigurations = (
 				B520B1AE3093D28B00A2902F /* Debug configuration for PBXNativeTarget "ClaudVaultUITests" */,
 				B520B1AF3093D28B00A2902F /* Release configuration for PBXNativeTarget "ClaudVaultUITests" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		B59F4986309E3125003ED35C /* Build configuration list for PBXNativeTarget "CloudVaultWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B59F4987309E3125003ED35C /* Debug configuration for PBXNativeTarget "CloudVaultWidgetExtension" */,
+				B59F4988309E3125003ED35C /* Release configuration for PBXNativeTarget "CloudVaultWidgetExtension" */,
 			);
 			defaultConfigurationName = Release;
 		};
@@ -721,6 +938,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B50A5835309CE4CE00AA12A8 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
+		};
+		B50A5837309CE4CE00AA12A8 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B556ECCE309CF4FA00BFC644 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

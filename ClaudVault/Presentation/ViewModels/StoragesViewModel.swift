@@ -204,6 +204,9 @@ final class StoragesViewModel {
         for kind in Self.supportedProviders {
             await restoreConnection(for: kind)
         }
+        // Публикуем итоговый снимок: если ни один аккаунт не подключён,
+        // виджет получит пустой список и перестанет показывать старые данные.
+        publishWidgetData()
     }
 
     private func restoreConnection(for kind: StorageProviderType) async {
@@ -261,6 +264,8 @@ final class StoragesViewModel {
             states[kind]?.folderStack = []
             states[kind]?.storageUsage = nil
         }
+
+        publishWidgetData()
     }
 
     // MARK: - Files
@@ -377,6 +382,30 @@ final class StoragesViewModel {
         } catch {
             states[kind]?.storageUsage = nil
         }
+
+        publishWidgetData()
+    }
+
+    // MARK: - Widget Snapshot
+
+    /// Собирает актуальный снимок подключённых хранилищ и публикует
+    /// его в App Group для виджета, затем перезагружает таймлайн.
+    /// Вызывается после каждой загрузки usage, connect/signOut
+    /// и завершения restoreConnection.
+    private func publishWidgetData() {
+        let accounts = Self.supportedProviders.compactMap { kind -> WidgetAccountInfo? in
+            guard let state = states[kind],
+                  let account = state.account else {
+                return nil
+            }
+            return WidgetAccountInfo(
+                provider: kind.rawValue,
+                email: account.email,
+                usedBytes: state.storageUsage?.usedBytes ?? 0,
+                totalBytes: state.storageUsage?.totalBytes ?? 0
+            )
+        }
+        WidgetDataPublisher.publish(accounts: accounts)
     }
 
     // MARK: - Create Folder
@@ -641,12 +670,13 @@ final class StoragesViewModel {
 
         var file = file
         file.thumbnailPath = cacheURL.path
+        let fileForLoad = file
 
         return CloudThumbnailProvider(cacheKey: cacheKey) {
             if let cached = CloudThumbnailCache.shared.data(forKey: cacheKey) {
                 return cached
             }
-            guard let data = try await repository.thumbnailData(for: file),
+            guard let data = try await repository.thumbnailData(for: fileForLoad),
                   !data.isEmpty else {
                 return nil
             }
@@ -855,8 +885,9 @@ final class StoragesViewModel {
             at: localURL,
             parentFolderID: targetParentID
         ) { [weak self] fraction in
+            guard let self else { return }
             Task { @MainActor in
-                self?.transferProgress = fraction
+                self.transferProgress = fraction
             }
         }
 
@@ -890,8 +921,9 @@ final class StoragesViewModel {
                 sizeBytes: sizeBytes,
                 readChunk: { try await reader.nextChunk() },
                 progressHandler: { [weak self] fraction in
+                    guard let self else { return }
                     Task { @MainActor in
-                        self?.transferProgress = fraction
+                        self.transferProgress = fraction
                     }
                 }
             )

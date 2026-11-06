@@ -71,7 +71,9 @@ struct AudioPlayerView: View {
         }
         .padding(.bottom, 32)
         .background(Color(red: 0.035, green: 0.045, blue: 0.075).ignoresSafeArea())
+        #if os(iOS)
         .presentationDetents([.medium])
+        #endif
         .onAppear(perform: setupPlayer)
         .onDisappear(perform: teardownPlayer)
     }
@@ -83,6 +85,15 @@ struct AudioPlayerView: View {
         let asset = AVURLAsset(url: stream.url, options: options)
         let item = AVPlayerItem(asset: asset)
 
+        Task {
+            if let loadedDuration = try? await asset.load(.duration) {
+                let seconds = loadedDuration.seconds
+                if seconds.isFinite, seconds > 0 {
+                    duration = seconds
+                }
+            }
+        }
+
         let player = AVPlayer(playerItem: item)
         self.player = player
 
@@ -91,13 +102,6 @@ struct AudioPlayerView: View {
             queue: .main
         ) { time in
             currentTime = time.seconds
-            if duration <= 0 {
-                let assetDuration = player.currentItem?
-                    .asset.duration.seconds ?? 0
-                if assetDuration.isFinite, assetDuration > 0 {
-                    duration = assetDuration
-                }
-            }
         }
 
         NotificationCenter.default.addObserver(

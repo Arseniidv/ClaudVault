@@ -50,6 +50,8 @@ final class OneDriveAuthManager {
         "https://graph.microsoft.com/v1.0/me"
 
     private let tokenStore = OneDriveTokenStore()
+    /// Единое Keychain-хранилище нормализованных сессий облаков.
+    private let keychainStorage = KeychainStorageService.makeDefault()
     private let session: URLSession
     private var webAuthSession: ASWebAuthenticationSession?
     private let presentationContext = OneDrivePresentationContext()
@@ -70,14 +72,18 @@ final class OneDriveAuthManager {
         if tokenStore.load() != nil {
             do {
                 _ = try await freshAccessToken()
-                return try await currentAccount()
+                let account = try await currentAccount()
+                await persistSession(account: account)
+                return account
             } catch {
                 tokenStore.delete()
             }
         }
 
         try await authorize()
-        return try await currentAccount()
+        let account = try await currentAccount()
+        await persistSession(account: account)
+        return account
     }
 
     /// Возвращает аккаунт при сохранённой сессии, иначе nil.
@@ -86,7 +92,9 @@ final class OneDriveAuthManager {
 
         do {
             _ = try await freshAccessToken()
-            return try await currentAccount()
+            let account = try await currentAccount()
+            await persistSession(account: account)
+            return account
         } catch {
             tokenStore.delete()
             return nil
@@ -95,6 +103,7 @@ final class OneDriveAuthManager {
 
     func signOut() {
         tokenStore.delete()
+        Task { try? await keychainStorage.deleteSessions(for: .oneDrive) }
     }
 
     /// Свежий access token: из Keychain, если не истёк,
@@ -161,7 +170,7 @@ final class OneDriveAuthManager {
             let session = ASWebAuthenticationSession(
                 url: url,
                 callbackURLScheme: Self.redirectScheme
-            ) { callbackURL, error in
+            ) { [weak self] callbackURL, error in
                 Task { @MainActor [weak self] in
                     self?.webAuthSession = nil
                     if let error {
@@ -237,6 +246,7 @@ final class OneDriveAuthManager {
 
         let refreshed = try await performTokenRequest(request)
         tokenStore.save(refreshed)
+        await mirrorTokenRefresh(refreshed)
         return refreshed.accessToken
     }
 
@@ -301,7 +311,50 @@ final class OneDriveAuthManager {
 
     private func handleInvalidGrant(message: String) async throws -> OneDriveTokenStore.StoredTokens {
         tokenStore.delete()
+        try? await keychainStorage.deleteSessions(for: .oneDrive)
         throw CloudStorageError.unauthorized
+    }
+
+    // MARK: - Session mirror
+
+    /// Дублирует активную OneDrive-сессию в нормализованную
+    /// `CloudAccountSession`-запись единого Keychain-хранилища.
+    private func persistSession(account: CloudStorageAccount) async {
+        guard let tokens = tokenStore.load() else { return }
+        await saveSessionMirror(CloudAccountSession(
+            provider: .oneDrive,
+            userEmail: account.email,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            expiresAt: tokens.expiresAt
+        ))
+    }
+
+    /// Обновляет access token/expiry в зеркальной записи после refresh,
+    /// чтобы `listAllSessions()` не возвращал протухший токен.
+    private func mirrorTokenRefresh(
+        _ tokens: OneDriveTokenStore.StoredTokens
+    ) async {
+        let sessions = await keychainStorage.listAllSessions()
+        for session in sessions where session.provider == .oneDrive {
+            await saveSessionMirror(CloudAccountSession(
+                provider: .oneDrive,
+                userEmail: session.userEmail,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                expiresAt: tokens.expiresAt
+            ))
+        }
+    }
+
+    private func saveSessionMirror(_ session: CloudAccountSession) async {
+        do {
+            try await keychainStorage.saveSession(session)
+        } catch {
+            #if DEBUG
+            print("[OneDrive] Failed to mirror session to Keychain: \(error)")
+            #endif
+        }
     }
 
     // MARK: - Account

@@ -29,7 +29,7 @@ enum AuthError: LocalizedError, Equatable {
         case .emailAlreadyInUse:
             return "Аккаунт с таким email уже существует."
         case .weakPassword:
-            return "Пароль слишком простой. Используйте минимум 6 символов."
+            return "Пароль слишком простой. Используйте минимум 12 символов."
         case .networkUnavailable:
             return "Нет подключения к сети. Проверьте соединение и повторите попытку."
         case .tooManyRequests:

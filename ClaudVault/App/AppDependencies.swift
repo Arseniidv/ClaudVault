@@ -24,7 +24,13 @@ struct AppDependencies {
     let fileCache: CloudFileCacheRepository
     let biometricAuthService: BiometricAuthService
     let otpService: OTPService
+    let passwordResetService: PasswordResetService
     let calculateStorageUsage: CalculateStorageUsageUseCase
+
+    // QR-перенос подключений между устройствами
+    let qrVerificationService: QRVerificationService
+    let cloudTokenStore: CloudTokenStore
+    let deviceTransferCoordinator: DeviceTransferCoordinator
 
     let uploadSessionRepository: UploadSessionRepositoryImpl
     let updateProgress: UpdateUploadProgressUseCase
@@ -91,6 +97,12 @@ struct AppDependencies {
         )
         self.biometricAuthService = BiometricAuthService()
         self.otpService = OTPService()
+        self.passwordResetService = PasswordResetService()
+
+        // QR-перенос подключений между устройствами
+        self.qrVerificationService = QRVerificationService()
+        self.cloudTokenStore = CloudTokenStore()
+        self.deviceTransferCoordinator = DeviceTransferCoordinator()
 
         // Backup use cases
         self.createBackupWithUpload = CreateBackupWithUploadUseCase(
@@ -135,7 +147,8 @@ struct AppDependencies {
             resetPasswordUseCase: resetPassword,
             getCurrentUserUseCase: getCurrentUserUseCase,
             authRepository: authRepository,
-            otpService: otpService
+            otpService: otpService,
+            passwordResetService: passwordResetService
         )
     }
 
@@ -149,6 +162,15 @@ struct AppDependencies {
             biometricAuth: biometricAuthService,
             otpService: otpService,
             fileCache: fileCache
+        )
+    }
+
+    func makeDeviceTransferViewModel() -> DeviceTransferViewModel {
+        DeviceTransferViewModel(
+            qrService: qrVerificationService,
+            tokenStore: cloudTokenStore,
+            biometricAuth: biometricAuthService,
+            coordinator: deviceTransferCoordinator
         )
     }
 

@@ -442,10 +442,12 @@ final class OneDriveService {
                 }
 
                 let data = (try? Data(contentsOf: tempURL)) ?? Data()
+                #if DEBUG
                 print(
                     "[OneDrive] HTTP \(status) GET \(requestURL.absoluteString)\n"
                         + (String(data: data, encoding: .utf8) ?? "<binary>")
                 )
+                #endif
                 let error = Self.mapError(status: status, data: data)
                 if status == 401 && !didRetryAuth {
                     didRetryAuth = true
@@ -488,7 +490,7 @@ final class OneDriveService {
         } else {
             path = "/root:/\(nameEncoded)"
         }
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+        let components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         guard var result = components else {
             throw CloudStorageError.invalidResponse
         }
@@ -588,10 +590,12 @@ final class OneDriveService {
                 continue
             }
 
+            #if DEBUG
             print(
                 "[OneDrive] HTTP \(status) \(method) \(url.absoluteString)\n"
                     + (String(data: data, encoding: .utf8) ?? "<binary>")
             )
+            #endif
             let error = Self.mapError(status: status, data: data)
             if method == "GET", Self.isRetryable(error), attempt < maxRequestAttempts - 1 {
                 attempt += 1

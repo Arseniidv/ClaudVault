@@ -210,6 +210,8 @@ final class GoogleDriveRepositoryImpl: CloudStorageRepository {
             return .noPresentingWindow
         case .scopeDenied, .missingEmail:
             return .permissionDenied
+        case .tokenExchangeFailed:
+            return .unauthorized
         case .missingAccount:
             return .operationFailed(
                 "Не удалось получить данные Google-аккаунта."
