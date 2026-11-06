@@ -1,0 +1,75 @@
+import Foundation
+import FirebaseFunctions
+
+enum OTPServiceError: LocalizedError {
+    /// Callable-функция не развёрнута в Firebase-проекте.
+    case functionNotDeployed
+
+    var errorDescription: String? {
+        switch self {
+        case .functionNotDeployed:
+            return "Сервис подтверждения не развёрнут на сервере. Необходимо выполнить deploy Cloud Functions."
+        }
+    }
+}
+
+/// Сервис OTP-подтверждения через Firebase Cloud Functions.
+/// Коды генерируются и проверяются на сервере, отправка — через SMTP.
+final class OTPService {
+    static let twoFactorEnabledKey = "twoFactorEnabled"
+    private static let verifiedUntilKey = "otpVerifiedUntil"
+
+    private let functions = Functions.functions()
+
+    // MARK: - 2FA flag
+
+    var isTwoFactorEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.twoFactorEnabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.twoFactorEnabledKey) }
+    }
+
+    // MARK: - Trust window
+
+    /// `true`, если пользователь недавно прошёл OTP-проверку
+    /// (сервер подтвердил код, клиент хранит срок действия окна).
+    var isRecentlyVerified: Bool {
+        let until = UserDefaults.standard.double(
+            forKey: Self.verifiedUntilKey
+        )
+        return until > Date().timeIntervalSince1970
+    }
+
+    // MARK: - Cloud calls
+
+    /// Запрашивает 6-значный код — сервер отправит его на email аккаунта.
+    func requestCode() async throws {
+        do {
+            _ = try await functions
+                .httpsCallable("requestEmailOtp")
+                .call()
+        } catch let error as NSError
+                    where error.domain == FunctionsErrorDomain
+                    && error.code == FunctionsErrorCode.notFound.rawValue {
+            throw OTPServiceError.functionNotDeployed
+        }
+    }
+
+    /// Проверяет код. При успехе открывает доверенное окно (~15 минут).
+    func verifyCode(_ code: String) async throws {
+        let result: HTTPSCallableResult
+        do {
+            result = try await functions
+                .httpsCallable("verifyEmailOtp")
+                .call(["code": code])
+        } catch let error as NSError
+                    where error.domain == FunctionsErrorDomain
+                    && error.code == FunctionsErrorCode.notFound.rawValue {
+            throw OTPServiceError.functionNotDeployed
+        }
+
+        let data = result.data as? [String: Any]
+        let validUntil = (data?["validUntil"] as? NSNumber)?.doubleValue
+            ?? Date().timeIntervalSince1970 + 15 * 60
+        UserDefaults.standard.set(validUntil, forKey: Self.verifiedUntilKey)
+    }
+}
