@@ -11,11 +11,11 @@ enum CloudThumbnailError: Error {
 /// исходники в память не попадают.
 final class CloudThumbnailProvider: ImageDataProvider {
     let cacheKey: String
-    private let load: () async throws -> Data?
+    private let load: @Sendable () async throws -> Data?
 
     init(
         cacheKey: String,
-        load: @escaping () async throws -> Data?
+        load: @escaping @Sendable () async throws -> Data?
     ) {
         self.cacheKey = cacheKey
         self.load = load

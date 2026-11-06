@@ -20,10 +20,6 @@ struct StorageOverviewView: View {
         return Int((usedStorage / totalStorage) * 100)
     }
 
-    private var progress: Double {
-        guard totalStorage > 0 else { return 0 }
-        return min(max(usedStorage / totalStorage, 0), 1)
-    }
 
     // MARK: - Body
 
@@ -49,18 +45,43 @@ struct StorageOverviewView: View {
             }
 
             GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.1))
+                HStack(spacing: 0) {
+                    ForEach(providers) { provider in
+                        let fraction = totalStorage > 0
+                            ? provider.usedStorage / totalStorage : 0
+                        let segmentWidth = geometry.size.width * CGFloat(fraction)
 
-                    Capsule()
-                        .fill(Color.cyan)
-                        .frame(
-                            width: geometry.size.width * progress
-                        )
+                        if segmentWidth > 0 {
+                            Rectangle()
+                                .fill(provider.tint)
+                                .frame(width: segmentWidth)
+                        }
+                    }
+
+                    let freeFraction = totalStorage > 0
+                        ? max(totalStorage - usedStorage, 0) / totalStorage : 1
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.06))
+                        .frame(width: geometry.size.width * CGFloat(freeFraction))
                 }
             }
-            .frame(height: 8)
+            .frame(height: 10)
+            .clipShape(Capsule())
+
+            HStack(spacing: 16) {
+                ForEach(providers) { provider in
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(provider.tint)
+                            .frame(width: 6, height: 6)
+
+                        Text("\(provider.name): \(provider.usedStorage, specifier: "%.1f") GB")
+                    }
+                }
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(.white.opacity(0.6))
 
             HStack {
                 Text("Занято: \(usedStorage, specifier: "%.1f") GB")

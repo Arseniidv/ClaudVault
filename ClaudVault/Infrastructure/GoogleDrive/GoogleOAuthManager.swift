@@ -29,6 +29,7 @@ enum GoogleOAuthError: LocalizedError {
     case missingEmail
     case noPresentingWindow
     case scopeDenied
+    case tokenExchangeFailed
 
     var errorDescription: String? {
         switch self {
@@ -44,6 +45,8 @@ enum GoogleOAuthError: LocalizedError {
             return "Не удалось найти окно для показа авторизации."
         case .scopeDenied:
             return "Не выдан доступ к Google Drive."
+        case .tokenExchangeFailed:
+            return "Не удалось обновить токен Google Drive. Подключите аккаунт заново."
         }
     }
 }
@@ -56,6 +59,13 @@ final class GoogleOAuthManager {
     static let driveScope = "https://www.googleapis.com/auth/drive.file"
 
     private(set) var isConfigured = false
+
+    /// Сессия, восстановленная через QR-перенос с другого устройства.
+    /// `GIDSignIn` не умеет принимать чужие токены, поэтому
+    /// refresh token хранится отдельно и обменивается на
+    /// access token напрямую через OAuth2 endpoint Google.
+    private let keychainStorageService = KeychainStorageService.makeDefault()
+    private let restoredSessionStore = GoogleSessionStore()
 
     // MARK: - Configuration
 
@@ -74,6 +84,7 @@ final class GoogleOAuthManager {
 
     var isSignedIn: Bool {
         GIDSignIn.sharedInstance.currentUser != nil
+            || restoredSessionStore.load() != nil
     }
 
     // MARK: - Connect
@@ -109,7 +120,9 @@ final class GoogleOAuthManager {
             throw GoogleOAuthError.missingAccount
         }
 
-        return try makeAccount(from: user)
+        let account = try makeAccount(from: user)
+        await persistSession(user: user, email: account.email)
+        return account
     }
 
     // MARK: - Restore Session
@@ -119,12 +132,16 @@ final class GoogleOAuthManager {
 
         do {
             let user = try await GIDSignIn.sharedInstance.restorePreviousSignIn()
-            return try makeAccount(from: user)
+            let account = try makeAccount(from: user)
+            await persistSession(user: user, email: account.email)
+            return account
         } catch let error as NSError {
             // Исправлено: заменено GIDSignInErrorCode на GIDSignInError
             if error.domain == kGIDSignInErrorDomain,
                error.code == GIDSignInError.hasNoAuthInKeychain.rawValue {
-                return nil
+                // Локальной сессии GIDSignIn нет — проверяем
+                // сессию, восстановленную через QR-перенос.
+                return restoredAccount()
             }
 
             throw Self.mapSignInError(error)
@@ -133,6 +150,8 @@ final class GoogleOAuthManager {
 
     func signOut() {
         GIDSignIn.sharedInstance.signOut()
+        restoredSessionStore.delete()
+        Task { try? await keychainStorageService.deleteSessions(for: .googleDrive) }
     }
 
     // MARK: - URL Handling
@@ -148,7 +167,11 @@ final class GoogleOAuthManager {
         try ensureConfigured()
 
         guard let user = GIDSignIn.sharedInstance.currentUser else {
-            throw GoogleOAuthError.notSignedIn
+            // Fallback: сессия, восстановленная через QR-перенос.
+            guard let session = restoredSessionStore.load() else {
+                throw GoogleOAuthError.notSignedIn
+            }
+            return try await restoredAccessToken(session: session)
         }
 
         _ = try await user.refreshTokensIfNeeded()
@@ -257,7 +280,141 @@ final class GoogleOAuthManager {
 
     #endif
 
+    // MARK: - Restored Session (QR transfer)
+
+    /// Аккаунт из сессии, восстановленной через QR-перенос.
+    /// Возвращает nil, если сессии нет или в ней нет scope Drive.
+    private func restoredAccount() -> GoogleAccount? {
+        guard let session = restoredSessionStore.load(),
+              session.grantedScopes.contains(Self.driveScope) else {
+            return nil
+        }
+        return GoogleAccount(
+            userID: session.userID,
+            email: session.email,
+            name: session.displayName
+        )
+    }
+
+    /// Access token для восстановленной сессии: из кэша,
+    /// если не истёк, иначе — обмен refresh token'а
+    /// на `https://oauth2.googleapis.com/token`.
+    private func restoredAccessToken(
+        session: GoogleRestoredSession
+    ) async throws -> String {
+        if let cached = session.accessToken,
+           let expiresAt = session.accessTokenExpiresAt,
+           expiresAt.timeIntervalSinceNow > 60 {
+            await persistRestoredSession(session: session, accessToken: cached)
+            return cached
+        }
+
+        var request = URLRequest(
+            url: URL(string: "https://oauth2.googleapis.com/token")!
+        )
+        request.httpMethod = "POST"
+        request.setValue(
+            "application/x-www-form-urlencoded",
+            forHTTPHeaderField: "Content-Type"
+        )
+        var fields: [String: String] = [
+            "client_id": session.clientID,
+            "refresh_token": session.refreshToken,
+            "grant_type": "refresh_token"
+        ]
+        if !session.grantedScopes.isEmpty {
+            fields["scope"] = session.grantedScopes.joined(separator: " ")
+        }
+        var components = URLComponents()
+        components.queryItems = fields
+            .sorted { $0.key < $1.key }
+            .map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = (components.percentEncodedQuery ?? "")
+            .data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw GoogleOAuthError.tokenExchangeFailed
+        }
+
+        struct TokenResponse: Decodable {
+            let accessToken: String?
+            let expiresIn: Double?
+            let error: String?
+
+            enum CodingKeys: String, CodingKey {
+                case accessToken = "access_token"
+                case expiresIn = "expires_in"
+                case error
+            }
+        }
+
+        let decoded = try? JSONDecoder().decode(TokenResponse.self, from: data)
+
+        guard (200..<300).contains(http.statusCode),
+              let accessToken = decoded?.accessToken else {
+            if decoded?.error == "invalid_grant" {
+                // Refresh token отозван/протух — сессию нужно переподключить.
+                restoredSessionStore.delete()
+                throw GoogleOAuthError.notSignedIn
+            }
+            throw GoogleOAuthError.tokenExchangeFailed
+        }
+
+        var updated = session
+        updated.accessToken = accessToken
+        // 60 секунд запаса до реального истечения.
+        updated.accessTokenExpiresAt = Date().addingTimeInterval(
+            (decoded?.expiresIn ?? 3600) - 60
+        )
+        restoredSessionStore.save(updated)
+        await persistRestoredSession(session: updated, accessToken: accessToken)
+
+        return accessToken
+    }
+
     // MARK: - Account Mapping
+
+    /// Дублирует активную Google-сессию в нормализованную
+    /// `CloudAccountSession`-запись единого Keychain-хранилища.
+    /// Сырые токены остаются под управлением GIDSignIn —
+    /// это индекс для `listAllSessions()` и QR-переноса.
+    private func persistSession(user: GIDGoogleUser, email: String) async {
+        let refreshToken = user.refreshToken.tokenString
+        await saveSessionMirror(CloudAccountSession(
+            provider: .googleDrive,
+            userEmail: email,
+            accessToken: user.accessToken.tokenString,
+            refreshToken: refreshToken.isEmpty ? nil : refreshToken,
+            // GIDSignIn не экспонирует срок жизни access token'а.
+            expiresAt: nil
+        ))
+    }
+
+    /// Зеркалирует QR-восстановленную сессию в `CloudAccountSession`,
+    /// чтобы `listAllSessions()` видел её наравне с обычным входом.
+    private func persistRestoredSession(
+        session: GoogleRestoredSession,
+        accessToken: String
+    ) async {
+        await saveSessionMirror(CloudAccountSession(
+            provider: .googleDrive,
+            userEmail: session.email,
+            accessToken: accessToken,
+            refreshToken: session.refreshToken,
+            expiresAt: session.accessTokenExpiresAt
+        ))
+    }
+
+    private func saveSessionMirror(_ session: CloudAccountSession) async {
+        do {
+            try await keychainStorageService.saveSession(session)
+        } catch {
+            #if DEBUG
+            print("[Google] Failed to mirror session to Keychain: \(error)")
+            #endif
+        }
+    }
 
     private func makeAccount(from user: GIDGoogleUser) throws -> GoogleAccount {
         guard let email = user.profile?.email else {

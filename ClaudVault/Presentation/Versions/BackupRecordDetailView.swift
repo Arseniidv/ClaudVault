@@ -23,12 +23,21 @@ struct BackupRecordDetailView: View {
             }
             .background(Color(red: 0.035, green: 0.045, blue: 0.075).ignoresSafeArea())
             .navigationTitle("Резервная копия")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Закрыть") { dismiss() }
                         .foregroundStyle(.white)
                 }
+                #else
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Закрыть") { dismiss() }
+                        .foregroundStyle(.white)
+                }
+                #endif
             }
             .task { viewModel.loadVersions() }
             .onChange(of: viewModel.recordDeleted) { _, deleted in

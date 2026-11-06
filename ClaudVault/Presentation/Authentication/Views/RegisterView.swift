@@ -30,7 +30,7 @@ struct RegisterView: View {
 
                     AuthPasswordField(
                         title: "Пароль",
-                        placeholder: "Минимум 6 символов",
+                        placeholder: "Минимум 12 символов",
                         password: $password
                     )
 
@@ -54,7 +54,9 @@ struct RegisterView: View {
                 .ignoresSafeArea()
         )
         .navigationTitle("Регистрация")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onAppear {
             authViewModel.clearMessages()
         }

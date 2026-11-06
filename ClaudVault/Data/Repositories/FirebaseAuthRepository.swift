@@ -2,7 +2,7 @@ import Foundation
 import FirebaseAuth
 import CryptoKit
 
-final class FirebaseAuthRepository: AuthRepository {
+final class FirebaseAuthRepository: AuthRepository, @unchecked Sendable {
     private let auth: Auth
     
     init(auth: Auth = Auth.auth()) {
@@ -12,7 +12,7 @@ final class FirebaseAuthRepository: AuthRepository {
     func signIn(email: String, password: String) async throws -> AuthUser {
         do {
             let result = try await auth.signIn(withEmail: email, password: password)
-            return mapUser(result.user)
+            return Self.mapUser(result.user)
         } catch {
             throw mapError(error)
         }
@@ -24,7 +24,7 @@ final class FirebaseAuthRepository: AuthRepository {
             let changeRequest = result.user.createProfileChangeRequest()
             changeRequest.displayName = name
             try await changeRequest.commitChanges()
-            return mapUser(result.user)
+            return Self.mapUser(result.user)
         } catch {
             throw mapError(error)
         }
@@ -73,7 +73,7 @@ final class FirebaseAuthRepository: AuthRepository {
                 link: link.absoluteString
             )
             try await result.user.reload()
-            return mapUser(result.user)
+            return Self.mapUser(result.user)
         } catch {
             throw mapError(error)
         }
@@ -84,20 +84,20 @@ final class FirebaseAuthRepository: AuthRepository {
 
     func getCurrentUser() async -> AuthUser? {
         guard let user = auth.currentUser else { return nil }
-        return mapUser(user)
+        return Self.mapUser(user)
     }
     
     func authStateChanges() -> AsyncStream<AuthUser?> {
         AsyncStream { continuation in
-            let listener = auth.addStateDidChangeListener { [weak self] _, firebaseUser in
-                guard let self else { return }
-                continuation.yield(firebaseUser.map { self.mapUser($0) })
+            let listener = auth.addStateDidChangeListener { _, firebaseUser in
+                continuation.yield(firebaseUser.map(Self.mapUser))
             }
             
             // Fixed MainActor isolation warning by wrapping in a Task
             continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
                 Task { @MainActor in
-                    self?.removeListener(listener)
+                    self.removeListener(listener)
                 }
             }
         }
@@ -107,7 +107,7 @@ final class FirebaseAuthRepository: AuthRepository {
         auth.removeStateDidChangeListener(listener)
     }
     
-    private func mapUser(_ user: FirebaseAuth.User) -> AuthUser {
+    private nonisolated static func mapUser(_ user: FirebaseAuth.User) -> AuthUser {
         AuthUser(
             id: Self.stableUUID(from: user.uid),
             email: user.email ?? "",
@@ -116,7 +116,7 @@ final class FirebaseAuthRepository: AuthRepository {
         )
     }
     
-    private static func stableUUID(from uid: String) -> UUID {
+    private nonisolated static func stableUUID(from uid: String) -> UUID {
         let digest = SHA256.hash(data: Data(uid.utf8))
         let hash = digest.prefix(16)
             .map { String(format: "%02x", $0) }

@@ -4,6 +4,7 @@ struct ActiveTransfersSectionView: View {
     let tasks: [SyncTask]
 
     var onPause: (SyncTask) -> Void = { _ in }
+    var onDelete: (SyncTask) -> Void = { _ in }
 
     var activeTasks: [SyncTask] {
         tasks.filter { $0.status == .transferring }
@@ -24,7 +25,7 @@ struct ActiveTransfersSectionView: View {
                 .foregroundStyle(Color.white.opacity(0.6))
 
             ForEach(activeTasks) { task in
-                SyncTaskCardView(task: task)
+                SyncTaskCardView(task: task, onDelete: { onDelete(task) })
             }
         }
     }

@@ -116,22 +116,22 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
             throw BackupMetadataRepositoryError.recordNotFound
         }
         
-        return try recordModel.versions
+        return recordModel.versions
             .sorted { $0.uploadedAt > $1.uploadedAt }
-            .map { try BackupModelMapper.toDomain($0) }
+            .map { BackupModelMapper.toDomain($0) }
     }
    
 }
 
 extension BackupMetadataRepositoryImpl: FileAccessRepository, FileHashing {
-    func hashFile(at url: URL) throws -> String {
+    nonisolated func hashFile(at url: URL) throws -> String {
         return try sha256(of: url)
     }
-    
+
 
     // MARK: - File Access
 
-    func withAccess<T>(
+    nonisolated func withAccess<T>(
         to url: URL,
         perform operation: (URL) throws -> T
     ) throws -> T {
@@ -176,7 +176,7 @@ extension BackupMetadataRepositoryImpl: FileAccessRepository, FileHashing {
         }
     }
     
-    func sha256(of fileURL: URL) throws -> String {
+    nonisolated func sha256(of fileURL: URL) throws -> String {
         return try withAccess(to: fileURL) { accessibleURL in
             guard FileManager.default.fileExists(
                 atPath: accessibleURL.path
@@ -209,7 +209,9 @@ extension BackupMetadataRepositoryImpl: FileAccessRepository, FileHashing {
         do {
             return try sha256(of: url)
         } catch {
+            #if DEBUG
             print("SHA-256 calculation failed: \(error)")
+            #endif
             return ""
         }
     }

@@ -3,6 +3,7 @@ import SwiftUI
 struct SyncTaskCardView: View {
 
     let task: SyncTask
+    var onDelete: (() -> Void)? = nil
 
     private var progressPercentage: Int {
         Int(min(max(task.progress, 0), 1) * 100)
@@ -36,6 +37,16 @@ struct SyncTaskCardView: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                if let onDelete {
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Удалить из истории")
+                }
 
                 Text("\(progressPercentage)%")
                     .font(.system(size: 15, weight: .medium, design: .monospaced))
@@ -98,5 +109,12 @@ struct SyncTaskCardView: View {
             RoundedRectangle(cornerRadius: 24)
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
+        .contextMenu {
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Удалить", systemImage: "trash")
+                }
+            }
+        }
     }
 }

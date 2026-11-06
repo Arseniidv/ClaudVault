@@ -202,10 +202,12 @@ final class GoogleDriveService {
                 }
 
                 let data = (try? Data(contentsOf: tempURL)) ?? Data()
+                #if DEBUG
                 print(
                     "[GoogleDrive] HTTP \(status) GET \(requestURL.absoluteString)\n"
                         + (String(data: data, encoding: .utf8) ?? "<binary>")
                 )
+                #endif
                 let error = Self.mapError(status: status, data: data)
                 if status == 401 && !didRetryAuth {
                     didRetryAuth = true
@@ -658,10 +660,12 @@ final class GoogleDriveService {
                 continue
             }
             
+            #if DEBUG
             print(
                 "[GoogleDrive] HTTP \(status) \(method) \(url.absoluteString)\n"
                     + (String(data: data, encoding: .utf8) ?? "<binary>")
             )
+            #endif
             let error = Self.mapError(status: status, data: data)
             // Повторяем только идемпотентные GET (при лимитах и 5xx) — чтобы не плодить дубликаты папок.
             if method == "GET", Self.isRetryable(error), attempt < maxRequestAttempts - 1 {

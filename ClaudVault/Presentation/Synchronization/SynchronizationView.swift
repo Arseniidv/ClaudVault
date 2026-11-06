@@ -5,27 +5,36 @@ struct SynchronizationView: View {
     let viewModel: SynchronizationViewModel
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                header
+        List {
+            Section {
+                VStack(alignment: .leading, spacing: 24) {
+                    header
+                    statusSection
+                    activeTransfersSection
+                }
+            }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 20, leading: 24, bottom: 24, trailing: 24))
 
-                statusSection
+            failedTransfersSection
 
-                activeTransfersSection
+            completedTransfersSection
 
-                failedTransfersSection
-
-                completedTransfersSection
-
+            Section {
                 footer
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 32)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 8, leading: 24, bottom: 32, trailing: 24))
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .background(Color(red: 0.035, green: 0.04, blue: 0.055))
         .navigationTitle("Синхронизация")
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .task {
             viewModel.startPolling()
         }
@@ -97,7 +106,10 @@ struct SynchronizationView: View {
     // MARK: - Active transfers
 
     private var activeTransfersSection: some View {
-        ActiveTransfersSectionView(tasks: viewModel.activeTasks)
+        ActiveTransfersSectionView(
+            tasks: viewModel.activeTasks,
+            onDelete: { viewModel.deleteSession(id: $0.id) }
+        )
     }
 
     // MARK: - Failed transfers
@@ -105,7 +117,31 @@ struct SynchronizationView: View {
     @ViewBuilder
     private var failedTransfersSection: some View {
         if !viewModel.failedSessions.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
+            Section {
+                ForEach(viewModel.failedSessions) { session in
+                    FailedTransferView(
+                        fileName: session.fileName,
+                        errorDescription: session.errorMessage ?? "Ошибка передачи",
+                        onRetry: { viewModel.retry(session) },
+                        onDelete: { viewModel.deleteSession(id: session.id) }
+                    )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            viewModel.deleteSession(id: session.id)
+                        } label: {
+                            Label("Удалить", systemImage: "trash")
+                        }
+                    }
+                    .swipeActions(edge: .leading) {
+                        Button {
+                            viewModel.retry(session)
+                        } label: {
+                            Label("Повторить", systemImage: "arrow.clockwise")
+                        }
+                        .tint(.blue)
+                    }
+                }
+            } header: {
                 HStack {
                     Text("Ошибки передачи")
                         .font(.system(size: 18, weight: .semibold))
@@ -121,22 +157,40 @@ struct SynchronizationView: View {
                         .background(Color.red.opacity(0.12))
                         .clipShape(Capsule())
                 }
-
-                ForEach(viewModel.failedSessions) { session in
-                    FailedTransferView(
-                        fileName: session.fileName,
-                        errorDescription: session.errorMessage ?? "Ошибка передачи",
-                        onRetry: { viewModel.retry(session) }
-                    )
-                }
+                .textCase(nil)
             }
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
         }
     }
 
     // MARK: - Completed transfers
 
     private var completedTransfersSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        Section {
+            if viewModel.completedTasks.isEmpty {
+                Text("Нет завершённых операций")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 20)
+            } else {
+                ForEach(viewModel.completedTasks) { task in
+                    SyncTaskCardView(
+                        task: task,
+                        onDelete: { viewModel.deleteSession(id: task.id) }
+                    )
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            viewModel.deleteSession(id: task.id)
+                        } label: {
+                            Label("Удалить", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        } header: {
             HStack {
                 Text("Завершённые операции")
                     .font(.system(size: 18, weight: .semibold))
@@ -152,19 +206,11 @@ struct SynchronizationView: View {
                     .background(Color.green.opacity(0.12))
                     .clipShape(Capsule())
             }
-
-            if viewModel.completedTasks.isEmpty {
-                Text("Нет завершённых операций")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
-            } else {
-                ForEach(viewModel.completedTasks) { task in
-                    SyncTaskCardView(task: task)
-                }
-            }
+            .textCase(nil)
         }
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
     }
 
     // MARK: - Footer

@@ -19,6 +19,7 @@ final class AuthViewModel: ObservableObject {
     private let getCurrentUserUseCase: GetCurrentUserUseCase
     private let authRepository: AuthRepository
     private let otpService: OTPService
+    private let passwordResetService: PasswordResetService
 
     // MARK: - Published Properties
     @Published private(set) var currentUser: AuthUser?
@@ -27,6 +28,8 @@ final class AuthViewModel: ObservableObject {
     @Published var successMessage: String?
     /// Показывать ли ввод OTP-кода (после отправки письма).
     @Published var isOTPEntryPresented = false
+    /// Код сброса пароля отправлен — ResetPasswordView показывает шаг 2.
+    @Published var isResetCodeSent = false
     // MARK: - Auth State
     private var authStateTask: Task<Void, Never>?
     // MARK: - Initializer
@@ -37,7 +40,8 @@ final class AuthViewModel: ObservableObject {
         resetPasswordUseCase: ResetPasswordUseCase,
         getCurrentUserUseCase: GetCurrentUserUseCase,
         authRepository: AuthRepository,
-        otpService: OTPService
+        otpService: OTPService,
+        passwordResetService: PasswordResetService
     ) {
         self.signInUseCase = signInUseCase
         self.signUpUseCase = signUpUseCase
@@ -46,6 +50,7 @@ final class AuthViewModel: ObservableObject {
         self.getCurrentUserUseCase = getCurrentUserUseCase
         self.authRepository = authRepository
         self.otpService = otpService
+        self.passwordResetService = passwordResetService
     }
     // MARK: - Observe Authentication
     func observeAuthState() {
@@ -53,6 +58,11 @@ final class AuthViewModel: ObservableObject {
         authStateTask = Task {
             for await user in getCurrentUserUseCase.observeAuthState() {
                 self.currentUser = user
+                if user == nil {
+                    // Сессия завершена — стираем снимок из App Group,
+                    // чтобы виджет не показывал чужие email/usage.
+                    WidgetDataPublisher.publish(accounts: [])
+                }
             }
         }
     }
@@ -135,15 +145,12 @@ final class AuthViewModel: ObservableObject {
                 withIDToken: idToken,
                 accessToken: accessToken
             )
-            let authResult = try await Auth.auth().signIn(
+            _ = try await Auth.auth().signIn(
                 with: credential
             )
             successMessage = "Вы успешно вошли через Google"
-            print("Google Sign-In successful")
-            print("User ID: \(authResult.user.uid)")
         } catch {
             errorMessage = error.localizedDescription
-            print("Google Sign-In error: \(error.localizedDescription)")
         }
     }
     func signUp(
@@ -162,8 +169,12 @@ final class AuthViewModel: ObservableObject {
             errorMessage = "Введите корректный email."
             return
         }
-        guard password.count >= 6 else {
-            errorMessage = "Пароль должен содержать минимум 6 символов."
+        guard password.count >= 12 else {
+            errorMessage = "Пароль должен содержать минимум 12 символов."
+            return
+        }
+        guard password.count <= 128 else {
+            errorMessage = "Пароль не должен превышать 128 символов."
             return
         }
         guard password == confirmPassword else {
@@ -233,6 +244,58 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Password Reset (Gmail)
+
+    /// Шаг 1 «Забыли пароль»: отправляет 6-значный код на email
+    /// через Gmail (Cloud Functions + SMTP).
+    func requestPasswordResetCode(email: String) async {
+        let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard validateEmail(trimmed) else {
+            errorMessage = "Введите корректный email."
+            return
+        }
+        await performAuthAction {
+            try await passwordResetService.requestCode(email: trimmed)
+            isResetCodeSent = true
+            successMessage = "Если аккаунт существует, код отправлен на \(trimmed)."
+        }
+    }
+
+    /// Шаг 2: проверяет код и устанавливает новый пароль.
+    func confirmPasswordReset(
+        email: String,
+        code: String,
+        newPassword: String
+    ) async {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedCode = code.trimmingCharacters(in: .whitespaces)
+        guard validateEmail(trimmedEmail) else {
+            errorMessage = "Введите корректный email."
+            return
+        }
+        guard trimmedCode.count == 6 else {
+            errorMessage = "Код должен содержать 6 цифр."
+            return
+        }
+        guard newPassword.count >= 12 else {
+            errorMessage = "Пароль должен содержать минимум 12 символов."
+            return
+        }
+        guard newPassword.count <= 128 else {
+            errorMessage = "Пароль не должен превышать 128 символов."
+            return
+        }
+        await performAuthAction {
+            try await passwordResetService.confirmReset(
+                email: trimmedEmail,
+                code: trimmedCode,
+                newPassword: newPassword
+            )
+            isResetCodeSent = false
+            successMessage = "Пароль обновлён. Войдите с новым паролем."
+        }
+    }
+
     // MARK: - Two-Factor (OTP)
 
     /// Включение 2FA: запрашивает код на email и показывает поле ввода.
@@ -297,31 +360,7 @@ final class AuthViewModel: ObservableObject {
             errorMessage = error.localizedDescription
         }
     }
-    @MainActor
-    func senfPasswordReset(email:String) async{
-        isLoading = true
-        errorMessage = nil
-        successMessage = nil
-        
-        defer{
-            isLoading = false
-        }
-        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedEmail.isEmpty else{
-            errorMessage = "Введите адрес электронной почты"
-            return
-        }
-        guard trimmedEmail.contains("G"),trimmedEmail.contains(".") else{
-            errorMessage = "Введите корректный email"
-            return
-        }
-        do{
-            try await Auth.auth().sendPasswordReset(withEmail: trimmedEmail)
-            successMessage = "Письмо для восстановления пароля отправлено"
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
+
     private func validateEmail(_ email: String) -> Bool {
         let email = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
