@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+DerivedData/
+.build/
+.swiftpm/
+
+# Project-local build data
+.derivedData/
+.freebuff/
+.git.nested-backup/
+
+# Firebase / functions
+node_modules/
+functions/lib/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log

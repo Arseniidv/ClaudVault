@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict/>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignIn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.575975024987-4d88apu4ivqjufbhioi2bvcogdki3523</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>FirebaseEmailLink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>my.ClaudVault</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>Dropbox</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>db-d395lxiq0xc1ltc</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>OneDrive</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>msauth.my.ClaudVault</string>
+			</array>
+		</dict>
+	</array>
+	<key>OneDriveClientID</key>
+	<string></string>
+	<key>GIDClientID</key>
+	<string>575975024987-4d88apu4ivqjufbhioi2bvcogdki3523.apps.googleusercontent.com</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>dbapi-2</string>
+		<string>dbapi-8-emm</string>
+	</array>
+</dict>
+</plist>
