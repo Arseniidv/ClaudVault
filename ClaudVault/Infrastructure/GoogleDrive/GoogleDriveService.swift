@@ -518,18 +518,70 @@ final class GoogleDriveService {
         )
     }
 
-    private enum UploadProgress {
+    /// Результат опроса resumable-сессии.
+    enum UploadProgress {
         case inProgress(nextByte: Int64)
         case completed(CloudFile?)
     }
-    
-    private func queryUploadStatus(sessionURL: URL, fileSize: Int64) async throws -> UploadProgress {
+
+    /// PUT одного фрагмента resumable-сессии: читает `length` байт
+    /// из `chunkFile` начиная с `chunkOffset` и отправляет их как
+    /// диапазон `absoluteOffset.../totalSize`. Ответ 308 —
+    /// `.progress` с подтверждённым смещением, 2xx — `.completed`.
+    func sendResumableChunk(
+        sessionURL: URL,
+        chunkFile: URL,
+        chunkOffset: Int64,
+        length: Int,
+        absoluteOffset: Int64,
+        totalSize: Int64,
+        mimeType: String
+    ) async throws -> ResumableSendResult {
+        var request = try await authorizedRequest(url: sessionURL, method: "PUT")
+        request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+        if totalSize > 0 {
+            let chunkEnd = absoluteOffset + Int64(length) - 1
+            request.setValue(
+                "bytes \(absoluteOffset)-\(chunkEnd)/\(totalSize)",
+                forHTTPHeaderField: "Content-Range"
+            )
+        } else {
+            request.setValue("bytes */0", forHTTPHeaderField: "Content-Range")
+        }
+
+        let body = length > 0
+            ? try readChunk(from: chunkFile, offset: chunkOffset, length: length)
+            : Data()
+        let (data, response) = try await perform(request, uploading: body)
+        let status = response.statusCode
+
+        if status == 308 {
+            let nextByte = Self.parseRangeHeader(
+                response.value(forHTTPHeaderField: "Range"),
+                totalSize: totalSize
+            )
+            return .progress(nextByte)
+        }
+        guard (200..<300).contains(status) else {
+            throw Self.mapError(status: status, data: data)
+        }
+        let file = (try? JSONDecoder().decode(FileDTO.self, from: data))?.asCloudFile
+        return .completed(file)
+    }
+
+    enum ResumableSendResult {
+        case progress(Int64)
+        case completed(CloudFile?)
+    }
+
+    /// Опрос статуса resumable-сессии (сколько байт принято / завершена).
+    func queryUploadStatus(sessionURL: URL, fileSize: Int64) async throws -> UploadProgress {
         var request = try await authorizedRequest(url: sessionURL, method: "PUT")
         request.setValue("bytes */\(fileSize)", forHTTPHeaderField: "Content-Range")
-        
+
         let (data, response) = try await perform(request, uploading: Data())
         let status = response.statusCode
-        
+
         if status == 308 {
             let nextByte = Self.parseRangeHeader(response.value(forHTTPHeaderField: "Range"), totalSize: fileSize)
             return .inProgress(nextByte: nextByte)
@@ -541,7 +593,37 @@ final class GoogleDriveService {
         }
         throw Self.mapError(status: status, data: data)
     }
-    
+
+    /// URL прямого скачивания (`alt=media`) для Range-источника
+    /// cloud-to-cloud передачи.
+    func mediaDownloadURL(for file: CloudFile) -> URL? {
+        makeURL(
+            path: "files/\(Self.encodePathSegment(file.id))",
+            queryItems: [URLQueryItem(name: "alt", value: "media")]
+        )
+    }
+
+    /// Провайдер свежих заголовков Authorization для Range-запросов:
+    /// вызывается перед каждой попыткой, токен может обновиться.
+    func chunkSourceHeadersProvider() -> @Sendable () async throws -> [String: String] {
+        { [tokenProvider] in
+            let token = try await tokenProvider()
+            let header = token.hasPrefix("Bearer ") ? token : "Bearer \(token)"
+            return ["Authorization": header]
+        }
+    }
+
+    /// Читает `length` байт из `fileURL` начиная с `offset`.
+    /// Диапазонное чтение — файл целиком в память не грузится.
+    func readFileRange(from fileURL: URL, offset: Int64, length: Int) throws -> Data {
+        try readChunk(from: fileURL, offset: offset, length: length)
+    }
+
+    /// Экранирует сегмент пути для Drive API.
+    static func encodeID(_ id: String) -> String {
+        encodePathSegment(id)
+    }
+
     private func readChunk(from fileURL: URL, offset: Int64, length: Int) throws -> Data {
         guard length > 0 else { return Data() }
         do {
@@ -565,7 +647,7 @@ final class GoogleDriveService {
     }
 
     /// Формат заголовка: "bytes=0-524287". Отсутствие заголовка означает «ничего не получено».
-    private static func parseRangeHeader(_ rangeHeader: String?, totalSize: Int64) -> Int64 {
+    static func parseRangeHeader(_ rangeHeader: String?, totalSize: Int64) -> Int64 {
         guard let rangeHeader,
               let prefix = rangeHeader.range(of: "bytes=") else { return 0 }
         let parts = rangeHeader[prefix.upperBound...].split(separator: "-")
@@ -677,7 +759,7 @@ final class GoogleDriveService {
         }
     }
     
-    private static func isRetryable(_ error: CloudStorageError) -> Bool {
+    static func isRetryable(_ error: CloudStorageError) -> Bool {
         switch error {
         case .network, .rateLimited:
             return true
@@ -688,7 +770,7 @@ final class GoogleDriveService {
         }
     }
     
-    private static func backoffNanoseconds(attempt: Int) -> UInt64 {
+    static func backoffNanoseconds(attempt: Int) -> UInt64 {
         let seconds = min(pow(2.0, Double(max(attempt - 1, 0))), 16)
         return UInt64(seconds * 1_000_000_000)
     }
