@@ -26,6 +26,8 @@ struct AppDependencies {
     let otpService: OTPService
     let passwordResetService: PasswordResetService
     let calculateStorageUsage: CalculateStorageUsageUseCase
+    let transferJournal: TransferJournalImpl
+    let transferEngine: TransferEngine
 
     // QR-перенос подключений между устройствами
     let qrVerificationService: QRVerificationService
@@ -90,6 +92,12 @@ struct AppDependencies {
         let oneDriveAuth = OneDriveAuthManager()
         self.oneDriveAuthManager = oneDriveAuth
         self.oneDriveRepository = OneDriveRepositoryImpl(authManager: oneDriveAuth)
+
+        // Журнал и движок chunked-передач (upload + cloud-to-cloud)
+        self.transferJournal = TransferJournalImpl(
+            modelContext: modelContainer.mainContext
+        )
+        self.transferEngine = TransferEngine(journal: transferJournal)
 
         // Кэш метаданных файлов между запусками
         self.fileCache = CloudFileCacheRepository(
@@ -161,7 +169,8 @@ struct AppDependencies {
             ],
             biometricAuth: biometricAuthService,
             otpService: otpService,
-            fileCache: fileCache
+            fileCache: fileCache,
+            transferEngine: transferEngine
         )
     }
 
