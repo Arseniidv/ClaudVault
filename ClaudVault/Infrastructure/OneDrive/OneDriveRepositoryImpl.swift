@@ -104,6 +104,59 @@ final class OneDriveRepositoryImpl: CloudStorageRepository {
         )
     }
 
+    /// Upload-сессия OneDrive для TransferEngine.
+    /// Состояние — `odrive:<uploadUrl>`; протухший URL
+    /// возвращает nil, движок начнёт загрузку заново.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        let parent = parentFolderID.flatMap { $0.isEmpty ? nil : $0 }
+
+        if let resumeState, !resumeState.isEmpty {
+            guard let session = try await OneDriveTransferSession.restore(
+                service: service,
+                resumeState: resumeState,
+                sizeBytes: sizeBytes,
+                name: name,
+                mimeType: mimeType,
+                parentFolderID: parent
+            ) else {
+                return nil
+            }
+            return (session, session.stateValue)
+        }
+
+        let session = try await OneDriveTransferSession.begin(
+            service: service,
+            name: name,
+            mimeType: mimeType,
+            parentFolderID: parent,
+            sizeBytes: sizeBytes
+        )
+        return (session, session.stateValue)
+    }
+
+    /// Pre-authenticated `@microsoft.graph.downloadUrl` как
+    /// Range-источник cloud-to-cloud передачи: CDN-ссылка
+    /// не требует Bearer и сама поддерживает Range.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)? {
+        guard let sizeBytes = file.sizeBytes, sizeBytes >= 0 else {
+            return nil
+        }
+        guard let url = try await service.downloadURL(for: file.id) else {
+            return nil
+        }
+        return HTTPRangeChunkSource(
+            url: url,
+            totalSize: sizeBytes,
+            headersProvider: { [:] }
+        )
+    }
+
     func searchFiles(query: String) async throws -> [CloudFile] {
         try await service.searchFiles(query: query)
     }
