@@ -49,6 +49,24 @@ protocol CloudStorageRepository {
         progressHandler: (@Sendable (Double) -> Void)?
     ) async throws -> CloudFile
 
+    /// Создаёт (или восстанавливает по `resumeState`) сессию
+    /// chunked-загрузки у провайдера. Возвращает сессию и её
+    /// сериализуемое состояние для журнала передач (без токенов).
+    /// `nil` — провайдер не поддерживает сессии или `resumeState`
+    /// протух: вызывающий код должен повторить с `resumeState: nil`.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)?
+
+    /// Возвращает потоковый источник байтов файла (Range-запросы
+    /// с обновлением авторизации) для cloud-to-cloud передачи
+    /// без промежуточного файла на диске. `nil` — не поддерживается.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)?
+
     /// Поиск файлов по имени по всему хранилищу.
     func searchFiles(query: String) async throws -> [CloudFile]
 
@@ -106,6 +124,22 @@ extension CloudStorageRepository {
         for file: CloudFile
     ) async throws -> CloudMediaStream {
         throw CloudStorageError.notImplemented
+    }
+
+    /// Провайдеры без chunked-загрузки через TransferSession.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        nil
+    }
+
+    /// Провайдеры без потокового источника Range-скачивания.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)? {
+        nil
     }
 
     /// Провайдеры без chunked-загрузки — вызывающий код
