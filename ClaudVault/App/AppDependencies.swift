@@ -42,6 +42,7 @@ struct AppDependencies {
     let createBackupWithUpload: CreateBackupWithUploadUseCase
     let reparseAndBackup: ReparseAndBackupUseCase
     let deleteBackup: DeleteBackupUseCase
+    let transferBackupToProvider: TransferBackupToProviderUseCase
     let fetchBackupVersions: FetchBackupVersionsUseCase
 
     init(
@@ -112,10 +113,17 @@ struct AppDependencies {
         self.cloudTokenStore = CloudTokenStore()
         self.deviceTransferCoordinator = DeviceTransferCoordinator()
 
-        // Backup use cases
+        // Backup use cases — все облака, чтобы бэкапы
+        // можно было создавать и удалять в любом из них.
+        let allRepositories: [StorageProviderType: CloudStorageRepository] = [
+            .googleDrive: cloudRepository,
+            .dropbox: dropboxRepository,
+            .oneDrive: oneDriveRepository
+        ]
         self.createBackupWithUpload = CreateBackupWithUploadUseCase(
             backupRepository: backupMetadataRepository,
             cloudStorageRepository: cloudRepository,
+            repositories: allRepositories,
             fileHasher: fileHasher,
             fileAccessRepository: fileAccessRepository,
             uploadSessionRepository: uploadRepository,
@@ -125,6 +133,7 @@ struct AppDependencies {
         self.reparseAndBackup = ReparseAndBackupUseCase(
             backupRepository: backupMetadataRepository,
             cloudStorageRepository: cloudRepository,
+            repositories: allRepositories,
             fileHasher: fileHasher,
             fileAccessRepository: fileAccessRepository,
             uploadSessionRepository: uploadRepository,
@@ -133,7 +142,14 @@ struct AppDependencies {
         )
         self.deleteBackup = DeleteBackupUseCase(
             backupRepository: backupMetadataRepository,
-            cloudStorageRepository: cloudRepository
+            cloudStorageRepository: cloudRepository,
+            repositories: allRepositories
+        )
+        self.transferBackupToProvider = TransferBackupToProviderUseCase(
+            backupRepository: backupMetadataRepository,
+            cloudStorageRepository: cloudRepository,
+            repositories: allRepositories,
+            transferEngine: transferEngine
         )
         self.fetchBackupVersions = FetchBackupVersionsUseCase(
             repository: backupMetadataRepository

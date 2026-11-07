@@ -15,6 +15,7 @@ struct CreateBackupView: View {
         fileAccessRepository: FileAccessRepository,
         fileHasher: FileHashing,
         createBackupWithUpload: CreateBackupWithUploadUseCase,
+        availableProviders: [StorageProviderType] = [.googleDrive],
         initialFileURL: URL? = nil,
         autoOpenImporter: Bool = false,
         onCreated: @escaping () -> Void
@@ -23,7 +24,8 @@ struct CreateBackupView: View {
             initialValue: CreateBackupViewModel(
                 fileAccessRepository: fileAccessRepository,
                 fileHasher: fileHasher,
-                createBackupWithUpload: createBackupWithUpload
+                createBackupWithUpload: createBackupWithUpload,
+                availableProviders: availableProviders
             )
         )
 
@@ -37,6 +39,7 @@ struct CreateBackupView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     headerSection
+                    providerSection
                     fileSelectionSection
                     if let fileName = viewModel.selectedFileName {
                         selectedFileSection(fileName: fileName)
@@ -117,6 +120,66 @@ struct CreateBackupView: View {
             Text("Файл будет загружен в подключённое облачное хранилище.")
                 .font(.system(size: 14))
                 .foregroundStyle(.white.opacity(0.55))
+        }
+    }
+
+    /// Выбор облака-приёмника: файл загружается в выбранное
+    /// подключённое хранилище (Google Drive, Dropbox, OneDrive).
+    private var providerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Облачное хранилище")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+
+            if viewModel.availableProviders.count > 1 {
+                HStack(spacing: 10) {
+                    ForEach(viewModel.availableProviders) { provider in
+                        let isSelected = viewModel.selectedProvider == provider
+                        Button {
+                            viewModel.selectedProvider = provider
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: provider.icon)
+                                Text(provider.name)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(isSelected ? .white : .white.opacity(0.65))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(
+                                isSelected
+                                    ? Color.blue.opacity(0.85)
+                                    : Color.white.opacity(0.05)
+                            )
+                            .clipShape(Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(
+                                        isSelected
+                                            ? Color.blue
+                                            : Color.white.opacity(0.12),
+                                        lineWidth: 1
+                                    )
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.isProgressing)
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: viewModel.selectedProvider.icon)
+                    Text(viewModel.selectedProvider.name)
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Color.white.opacity(0.05))
+                .clipShape(Capsule())
+            }
         }
     }
 

@@ -10,6 +10,9 @@ protocol BackupMetadataRepository {
     func deleteRecord(id: UUID) throws
     func saveVersion(_ version: BackupVersion) throws
     func saveVersion(_ version: BackupVersion, for recordID: UUID) throws
+    /// Обновляет существующую версию (например, новый cloudObjectID
+    /// после переноса между облаками). Если версии нет — ничего не делает.
+    func updateVersion(_ version: BackupVersion) throws
     func deleteVersion(id: UUID) throws
     func saveRecord(_ record: BackupRecord) throws
 
