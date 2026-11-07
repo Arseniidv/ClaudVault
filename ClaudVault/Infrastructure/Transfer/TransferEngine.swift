@@ -334,7 +334,14 @@ final class TransferEngine {
             session: session,
             chunkSize: chunkSize,
             onConfirmedOffset: { offset in
-                try await journal.updateProgress(id: recordID, offset: offset)
+                try await journal.updateProgress(
+                    id: recordID,
+                    offset: offset,
+                    sessionState: session.stateValue,
+                    hashAlgorithm: nil,
+                    hashValue: nil,
+                    streamSHA256: nil
+                )
                 onProgress?(Self.progress(uploaded: offset, total: record.sizeBytes))
             }
         )

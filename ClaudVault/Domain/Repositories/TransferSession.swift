@@ -40,6 +40,11 @@ protocol ChunkSource: Sendable {
 protocol TransferSession: Sendable {
     var confirmedOffset: Int64 { get }
 
+    /// Сериализуемое состояние сессии для журнала передач
+    /// (без токенов). Может меняться по ходу загрузки —
+    /// журнал перечитывает его после каждого чанка.
+    var stateValue: String { get }
+
     /// Отправить чанк. `payload.absoluteOffset` — позиция чанка
     /// в файле, `payload.length` — размер в байтах.
     /// Не должна читать файл целиком в память — только диапазон.
