@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Клиент Microsoft Graph API для OneDrive (`/me/drive`).
 ///
@@ -7,6 +8,10 @@ import Foundation
 /// длительность медиа — `video`/`audio.duration` (ISO 8601).
 final class OneDriveService {
 
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "one-drive"
+    )
     private let session: URLSession
     private let tokenProvider: () async throws -> String
 
@@ -610,12 +615,9 @@ final class OneDriveService {
                 }
 
                 let data = (try? Data(contentsOf: tempURL)) ?? Data()
-                #if DEBUG
-                print(
-                    "[OneDrive] HTTP \(status) GET \(requestURL.absoluteString)\n"
-                        + (String(data: data, encoding: .utf8) ?? "<binary>")
+                Self.logger.debug(
+                    "GET failed: HTTP \(status, privacy: .public)"
                 )
-                #endif
                 let error = Self.mapError(status: status, data: data)
                 if status == 401 && !didRetryAuth {
                     didRetryAuth = true
@@ -762,12 +764,9 @@ final class OneDriveService {
                 continue
             }
 
-            #if DEBUG
-            print(
-                "[OneDrive] HTTP \(status) \(method) \(url.absoluteString)\n"
-                    + (String(data: data, encoding: .utf8) ?? "<binary>")
+            Self.logger.debug(
+                "\(method, privacy: .public) failed: HTTP \(status, privacy: .public)"
             )
-            #endif
             let error = Self.mapError(status: status, data: data)
             if method == "GET", Self.isRetryable(error), attempt < maxRequestAttempts - 1 {
                 attempt += 1

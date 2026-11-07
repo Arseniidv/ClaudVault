@@ -1,6 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 import SwiftyDropbox
+import OSLog
 
 /// Реализация `CloudStorageRepository` поверх SwiftyDropbox.
 ///
@@ -8,6 +9,11 @@ import SwiftyDropbox
 /// он стабилен между запросами и подходит для `getMetadata`/`deleteV2`,
 /// в отличие от file id, который требует других эндпоинтов.
 final class DropboxRepositoryImpl: CloudStorageRepository {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "dropbox"
+    )
 
     private let authManager: DropboxAuthManager
 
@@ -55,14 +61,10 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
         } catch let error as CallError<Files.ListFolderError> {
-            #if DEBUG
-            print("[Dropbox] listFolder(path: \(path)) failed: \(error)")
-            #endif
+            Self.logger.debug("listFolder failed")
             throw DropboxAuthManager.mapError(error)
         } catch let error as CallError<Files.ListFolderContinueError> {
-            #if DEBUG
-            print("[Dropbox] listFolderContinue failed: \(error)")
-            #endif
+            Self.logger.debug("listFolderContinue failed")
             throw DropboxAuthManager.mapError(error)
         }
     }

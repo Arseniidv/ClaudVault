@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Маршрут для push-навигации внутри стека «Файлы»:
 /// папка из облака, открытая из результатов поиска.
@@ -12,6 +13,11 @@ struct CloudFolderRoute: Hashable {
 /// Каждый уровень — отдельный push в NavigationStack текущей вкладки,
 /// поэтому кнопка «Назад» работает нативно.
 struct CloudFolderBrowserView: View {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "cloud-folder-browser"
+    )
     let provider: StorageProviderType
     let route: CloudFolderRoute
     let storagesViewModel: StoragesViewModel
@@ -209,15 +215,7 @@ struct CloudFolderBrowserView: View {
                 parentFolderID: route.folderID
             )
         } catch {
-            #if DEBUG
-            print(
-                "[CloudFolderBrowser] listFiles failed — "
-                    + "provider=\(provider.rawValue) "
-                    + "folderID=\(route.folderID) "
-                    + "folderName=\(route.folderName) "
-                    + "error=\(error)"
-            )
-            #endif
+            Self.logger.debug("listFiles failed")
             loadError = "\(provider.name): \(error.localizedDescription)"
         }
     }
