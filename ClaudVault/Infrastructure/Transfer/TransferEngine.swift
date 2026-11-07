@@ -120,16 +120,6 @@ final class TransferEngine {
                 parentFolderID: targetParentID
             )
 
-            // Верификация размера у приёмника — обязательна
-            // до удаления источника при move.
-            try await journal.setState(id: record.id, state: .verifying)
-            let meta = try await target.fileMetadata(id: uploaded.id)
-            guard meta.sizeBytes == sizeBytes else {
-                throw CloudStorageError.operationFailed(
-                    "Размер загруженного файла не совпадает с источником."
-                )
-            }
-
             if move {
                 try await source.deleteFile(id: file.id)
             }
@@ -206,13 +196,6 @@ final class TransferEngine {
                 ? nil : record.targetParentID,
             existingSession: session
         )
-        try await journal.setState(id: record.id, state: .verifying)
-        let meta = try await target.fileMetadata(id: uploaded.id)
-        guard meta.sizeBytes == record.sizeBytes else {
-            throw CloudStorageError.operationFailed(
-                "Размер загруженного файла не совпадает с источником."
-            )
-        }
         try await journal.delete(id: record.id)
     }
 
@@ -246,13 +229,6 @@ final class TransferEngine {
                 ? nil : record.targetParentID,
             existingSession: session
         )
-        try await journal.setState(id: record.id, state: .verifying)
-        let meta = try await target.fileMetadata(id: uploaded.id)
-        guard meta.sizeBytes == record.sizeBytes else {
-            throw CloudStorageError.operationFailed(
-                "Размер загруженного файла не совпадает с источником."
-            )
-        }
         if record.moveSource {
             try await source.deleteFile(id: record.sourceFileID)
         }
@@ -324,13 +300,17 @@ final class TransferEngine {
         try await journal.updateOffset(id: record.id, offset: session.confirmedOffset)
         try await journal.setState(id: record.id, state: .uploading)
 
+        // Обёртка считает контрольные суммы передаваемых байт —
+        // после завершения сравним их с чексуммами приёмника.
+        let hashingSource = HashingChunkSource(base: source)
+
         let recordID = record.id
         let journal = self.journal
         let chunkSize = self.chunkSize
         let onProgress = self.onProgress
 
         let uploaded = try await ChunkedUploadRunner.run(
-            source: source,
+            source: hashingSource,
             session: session,
             chunkSize: chunkSize,
             onConfirmedOffset: { offset in
@@ -345,7 +325,44 @@ final class TransferEngine {
                 onProgress?(Self.progress(uploaded: offset, total: record.sizeBytes))
             }
         )
+
+        // Верификация обязательна до удаления записи журнала
+        // и (для move) источника: размер + контрольная сумма,
+        // если провайдер её отдаёт и мы смогли посчитать.
+        try await journal.setState(id: record.id, state: .verifying)
+        let meta = try await target.fileMetadata(id: uploaded.id)
+        guard meta.sizeBytes == record.sizeBytes else {
+            throw CloudStorageError.operationFailed(
+                "Размер загруженного файла не совпадает с источником."
+            )
+        }
+        if let computed = hashingSource.finalizeHashes() {
+            try Self.verifyHashes(
+                computed: computed,
+                provider: meta.contentHashes
+            )
+        }
         return uploaded
+    }
+
+    /// Сравнивает вычисленные хеши с чексуммами провайдера.
+    /// Проверяются только алгоритмы, которые есть с обеих сторон;
+    /// несовпадение любого общего алгоритма — ошибка передачи.
+    private static func verifyHashes(
+        computed: [ContentHash],
+        provider: [ContentHash]
+    ) throws {
+        for expected in provider {
+            guard let actual = computed.first(where: {
+                $0.algorithm == expected.algorithm
+            }) else { continue }
+            if actual.value.caseInsensitiveCompare(expected.value)
+                != .orderedSame {
+                throw CloudStorageError.operationFailed(
+                    "Контрольная сумма файла не совпадает — передача повреждена."
+                )
+            }
+        }
     }
 
     private static func progress(uploaded: Int64, total: Int64) -> Double {

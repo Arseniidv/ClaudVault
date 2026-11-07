@@ -5,7 +5,7 @@ final class GoogleDriveService {
     private let tokenProvider: () async throws -> String
     private let apiBaseURL = URL(string: "https://www.googleapis.com/drive/v3")!
     private let uploadBaseURL = URL(string: "https://www.googleapis.com/upload/drive/v3")!
-    private static let fileFields = "id,name,mimeType,modifiedTime,size,parents,thumbnailLink,videoMediaMetadata"
+    private static let fileFields = "id,name,mimeType,modifiedTime,size,parents,thumbnailLink,videoMediaMetadata,md5Checksum,sha1Checksum"
     private let chunkSize: Int64 = 8 * 1024 * 1024
     private let maxUploadRetries = 5
     private let maxRequestAttempts = 3 
@@ -839,16 +839,26 @@ private struct FileDTO: Decodable {
     let size: FlexibleInt64?
     let thumbnailLink: String?
     let videoMediaMetadata: VideoMediaMetadata?
+    let md5Checksum: String?
+    let sha1Checksum: String?
 
     var asCloudFile: CloudFile {
-        CloudFile(
+        var hashes: [ContentHash] = []
+        if let md5 = md5Checksum, !md5.isEmpty {
+            hashes.append(ContentHash(algorithm: .md5, value: md5))
+        }
+        if let sha1 = sha1Checksum, !sha1.isEmpty {
+            hashes.append(ContentHash(algorithm: .sha1, value: sha1))
+        }
+        return CloudFile(
             id: id,
             name: name,
             mimeType: mimeType,
             sizeBytes: size?.value,
             modifiedAt: Self.date(from: modifiedTime),
             thumbnailURL: thumbnailLink,
-            duration: videoMediaMetadata?.durationSeconds
+            duration: videoMediaMetadata?.durationSeconds,
+            contentHashes: hashes
         )
     }
     

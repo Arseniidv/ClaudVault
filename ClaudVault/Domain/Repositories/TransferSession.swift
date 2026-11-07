@@ -60,7 +60,7 @@ protocol TransferSession: Sendable {
 
 /// Алгоритм хеша содержимого, который провайдер возвращает
 /// в метаданных файла после загрузки.
-enum ContentHashAlgorithm: String, Sendable {
+enum ContentHashAlgorithm: String, Sendable, Codable {
     /// SHA-1 hex — Google Drive `sha1Checksum`, OneDrive `file.hashes.sha1Hash`.
     case sha1
     /// MD5 hex — Google Drive `md5Checksum`.
@@ -70,7 +70,7 @@ enum ContentHashAlgorithm: String, Sendable {
 }
 
 /// Хеш содержимого в формате конкретного провайдера.
-struct ContentHash: Equatable, Sendable {
+struct ContentHash: Equatable, Sendable, Codable {
     let algorithm: ContentHashAlgorithm
     let value: String
 }

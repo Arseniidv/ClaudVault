@@ -21,6 +21,10 @@ struct CloudFile: Identifiable, Equatable, Codable {
     var thumbnailPath: String? = nil
     /// Длительность аудио/видео в секундах, если провайдер её отдаёт.
     var duration: TimeInterval? = nil
+    /// Контрольные суммы содержимого, которые провайдер
+    /// возвращает в метаданных (md5/sha1/content_hash).
+    /// Используются для верификации передач.
+    var contentHashes: [ContentHash] = []
 
     var kind: Kind {
         mimeType == CloudFile.folderMimeType ? .folder : .file

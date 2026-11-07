@@ -273,13 +273,20 @@ final class DropboxTransferSession: TransferSession, @unchecked Sendable {
     /// DropboxRepositoryImpl.mapMetadata).
     private static func mapMetadata(_ metadata: Files.Metadata) -> CloudFile? {
         guard let file = metadata as? Files.FileMetadata else { return nil }
+        var hashes: [ContentHash] = []
+        if let contentHash = file.contentHash, !contentHash.isEmpty {
+            hashes.append(
+                ContentHash(algorithm: .dropboxContent, value: contentHash)
+            )
+        }
         return CloudFile(
             id: file.pathDisplay ?? file.pathLower ?? file.id,
             name: file.name,
             mimeType: mimeType(for: file.name),
             sizeBytes: Int64(min(file.size, UInt64(Int64.max))),
             modifiedAt: file.serverModified,
-            duration: videoDuration(from: file)
+            duration: videoDuration(from: file),
+            contentHashes: hashes
         )
     }
 

@@ -848,6 +848,14 @@ struct DriveItemDTO: Decodable {
 
     struct FileFacet: Decodable {
         let mimeType: String?
+        let hashes: HashesFacet?
+
+        struct HashesFacet: Decodable {
+            /// SHA-1 hex (строчными буквами, base64 в Graph —
+            /// см. ниже: Graph отдаёт base64, конвертируем).
+            let sha1Hash: String?
+            let quickXorHash: String?
+        }
     }
     struct FolderFacet: Decodable {}
     struct MediaFacet: Decodable {
@@ -866,13 +874,24 @@ struct DriveItemDTO: Decodable {
             )
         }
 
+        var hashes: [ContentHash] = []
+        // Graph отдаёт sha1Hash в base64 — приводим к hex,
+        // чтобы сравнивать с локально вычисленным SHA-1.
+        if let b64 = file?.hashes?.sha1Hash,
+           let data = Data(base64Encoded: b64) {
+            hashes.append(
+                ContentHash(algorithm: .sha1, value: data.hexString)
+            )
+        }
+
         return CloudFile(
             id: id,
             name: name,
             mimeType: file?.mimeType ?? "application/octet-stream",
             sizeBytes: size,
             modifiedAt: Self.date(from: lastModifiedDateTime),
-            duration: Self.durationSeconds(from: video?.duration ?? audio?.duration)
+            duration: Self.durationSeconds(from: video?.duration ?? audio?.duration),
+            contentHashes: hashes
         )
     }
 
@@ -924,6 +943,14 @@ private struct ThumbnailSet: Decodable {
     let large: Size?
     let c400x400: Size?
     let c10000x10000: Size?
+}
+
+private extension Data {
+    /// HEX-представление байт (нижний регистр) — для сравнения
+    /// с чексуммами провайдеров.
+    var hexString: String {
+        map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 private extension URL {
