@@ -8,6 +8,7 @@ private nonisolated enum KeychainConstants {
 enum KeychainStorageError: LocalizedError {
     case unexpectedStatus(OSStatus)
     case invalidStoredSession
+    case missingOwnerID
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,8 @@ enum KeychainStorageError: LocalizedError {
             return "Keychain error (OSStatus: \(status))"
         case .invalidStoredSession:
             return "Stored cloud session is invalid"
+        case .missingOwnerID:
+            return "Cloud session has no owner"
         }
     }
 }
@@ -176,8 +179,15 @@ actor KeychainStorageService {
         .shared
     }
 
+    /// Сохраняет сессию под ключом `<ownerID>|<provider>|<email>`.
+    /// Сессия без `ownerID` не записывается — несуществующий
+    /// владелец означал бы утечку токенов между аккаунтами.
     func saveSession(_ session: CloudAccountSession) throws {
+        guard !session.ownerID.isEmpty else {
+            throw KeychainStorageError.missingOwnerID
+        }
         let account = Self.accountKey(
+            ownerID: session.ownerID,
             provider: session.provider,
             userEmail: session.userEmail
         )
@@ -187,9 +197,15 @@ actor KeychainStorageService {
 
     func loadSession(
         for provider: CloudProviderType,
-        email: String
+        email: String,
+        ownerID: String
     ) -> CloudAccountSession? {
-        let account = Self.accountKey(provider: provider, userEmail: email)
+        guard !ownerID.isEmpty else { return nil }
+        let account = Self.accountKey(
+            ownerID: ownerID,
+            provider: provider,
+            userEmail: email
+        )
         guard let data = KeychainItemStore.load(account: account) else {
             return nil
         }
@@ -198,27 +214,84 @@ actor KeychainStorageService {
 
     func deleteSession(
         for provider: CloudProviderType,
-        email: String
+        email: String,
+        ownerID: String
     ) throws {
-        let account = Self.accountKey(provider: provider, userEmail: email)
+        guard !ownerID.isEmpty else { return }
+        let account = Self.accountKey(
+            ownerID: ownerID,
+            provider: provider,
+            userEmail: email
+        )
         try KeychainItemStore.delete(account: account)
     }
 
     /// Удаляет все `CloudAccountSession`-записи провайдера
-    /// (любой email). Удобно для sign-out, когда email неизвестен.
-    func deleteSessions(for provider: CloudProviderType) throws {
-        for session in listAllSessions() where session.provider == provider {
-            try deleteSession(for: provider, email: session.userEmail)
+    /// текущего пользователя (любой email). Удобно для sign-out,
+    /// когда email неизвестен. Чужие сессии не затрагиваются.
+    func deleteSessions(
+        for provider: CloudProviderType,
+        ownerID: String
+    ) throws {
+        for session in listAllSessions(ownerID: ownerID)
+        where session.provider == provider {
+            try deleteSession(
+                for: provider,
+                email: session.userEmail,
+                ownerID: ownerID
+            )
         }
     }
 
-    func listAllSessions() -> [CloudAccountSession] {
-        KeychainItemStore.allData().compactMap { data in
-            try? decoder.decode(CloudAccountSession.self, from: data)
+    /// Все `CloudAccountSession`-записи указанного пользователя.
+    /// Записи других владельцев и записи без ownerID не возвращаются.
+    func listAllSessions(ownerID: String) -> [CloudAccountSession] {
+        guard !ownerID.isEmpty else { return [] }
+        // allData() возвращает только значения, поэтому принадлежность
+        // проверяем по ownerID внутри самого payload — этого достаточно:
+        // чужие и бесхозные ("") записи отбрасываются декодером-фильтром.
+        return KeychainItemStore.allData().compactMap { data in
+            guard let session = try? decoder.decode(
+                CloudAccountSession.self, from: data
+            ), session.ownerID == ownerID else {
+                return nil
+            }
+            return session
         }
+    }
+
+    /// Удаляет `CloudAccountSession`-записи старого формата
+    /// `<provider>|<email>` — без владельца они содержат
+    /// access/refresh-токены и не могут быть безопасно привязаны
+    /// ни к одному аккаунту. Вызывается один раз при входе
+    /// пользователя — см. `UserSessionCoordinator`. Пользователю
+    /// достаточно один раз переподключить облачные сервисы.
+    @discardableResult
+    func deleteLegacySessions() -> Int {
+        var deleted = 0
+        for account in KeychainItemStore.allAccounts() {
+            // Новый формат: "<ownerID>|<provider>|<email>" — 2 разделителя.
+            // Провайдерские служебные ключи ("dropbox-sdk|…",
+            // "google-restored|…", "onedrive|tokens|…") отсекаются
+            // проверкой первого компонента на CloudProviderType
+            // и неудачным декодированием ниже.
+            let parts = account.split(separator: "|", omittingEmptySubsequences: false)
+            guard parts.count == 2,
+                  CloudProviderType(rawValue: String(parts[0])) != nil,
+                  let data = KeychainItemStore.load(account: account),
+                  let session = try? decoder.decode(
+                      CloudAccountSession.self, from: data
+                  ), session.ownerID.isEmpty else {
+                continue
+            }
+            try? KeychainItemStore.delete(account: account)
+            deleted += 1
+        }
+        return deleted
     }
 
     private static func accountKey(
+        ownerID: String,
         provider: CloudProviderType,
         userEmail: String
     ) -> String {
@@ -226,6 +299,6 @@ actor KeychainStorageService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
-        return "\(provider.rawValue)|\(normalizedEmail)"
+        return "\(ownerID)|\(provider.rawValue)|\(normalizedEmail)"
     }
 }

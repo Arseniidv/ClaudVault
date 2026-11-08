@@ -26,6 +26,11 @@ const OTP_TTL_MS = 10 * 60 * 1000;          // код живёт 10 минут
 const VERIFY_WINDOW_MS = 15 * 60 * 1000;    // после ввода кода — 15 минут "доверенного" окна
 const RESEND_INTERVAL_MS = 60 * 1000;       // не чаще 1 кода в минуту
 const MAX_ATTEMPTS = 5;
+// Суточный лимит писем сброса пароля на один email: без него
+// публичная requestPasswordResetCode позволяла бы заваливать
+// чужой ящик кодами (1 письмо/мин = ~1440 писем в сутки).
+const RESET_SEND_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_RESETS_PER_WINDOW = 5;
 
 function otpRef(uid) {
   return db.collection("otps").doc(uid);
@@ -381,11 +386,18 @@ exports.requestPasswordResetCode = onCall(
     const ref = resetRef(email);
     const code = crypto.randomInt(0, 1000000).toString().padStart(6, "0");
 
-    // Атомарная проверка resend-интервала и лимита попыток —
-    // иначе параллельные запросы обходят ограничения.
+    // Атомарная проверка resend-интервала, лимита попыток и
+    // суточного лимита отправок — иначе параллельные запросы
+    // обходят ограничения, а email-bombing остаётся возможным.
     await db.runTransaction(async (tx) => {
       const existing = await tx.get(ref);
       const now = Date.now();
+
+      // Окно считается в миллисекундах (число), чтобы сравнивать
+      // без Timestamp-полей: sendWindowStart обновляется при
+      // отправке, sendWindowCount — число писем в текущем окне.
+      let windowStart = 0;
+      let sentInWindow = 0;
 
       if (existing.exists) {
         const data = existing.data();
@@ -403,6 +415,17 @@ exports.requestPasswordResetCode = onCall(
             "Слишком много попыток. Запросите новый код."
           );
         }
+
+        windowStart = data.sendWindowStart ?? 0;
+        sentInWindow = now - windowStart < RESET_SEND_WINDOW_MS
+          ? (data.sendWindowCount ?? 0)
+          : 0;
+        if (sentInWindow >= MAX_RESETS_PER_WINDOW) {
+          throw new HttpsError(
+            "resource-exhausted",
+            "Превышен лимит запросов сброса пароля. Попробуйте позже."
+          );
+        }
       }
 
       tx.set(ref, {
@@ -411,6 +434,8 @@ exports.requestPasswordResetCode = onCall(
         codeHash: hashCode(code),
         expiresAt: now + OTP_TTL_MS,
         attempts: 0,
+        sendWindowStart: sentInWindow === 0 ? now : windowStart,
+        sendWindowCount: sentInWindow + 1,
         updatedAt: FieldValue.serverTimestamp(),
       });
     });

@@ -2,16 +2,19 @@
 import SwiftUI
 
 struct SettingsProfileView: View {
-    var accountName: String? = nil
-    var accountEmail: String? = nil
+    @ObservedObject var authViewModel: AuthViewModel
+
+    private var user: AuthUser? {
+        authViewModel.currentUser
+    }
 
     private var isConnected: Bool {
-        accountEmail != nil
+        user != nil
     }
 
     var body: some View {
         NavigationLink {
-            ProfileView()
+            ProfileView(authViewModel: authViewModel)
         } label: {
             HStack(spacing: 14) {
 
@@ -36,11 +39,11 @@ struct SettingsProfileView: View {
 
                 // Информация о профиле
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(accountName ?? "Локальный профиль")
+                    Text(user?.resolvedDisplayName ?? "Локальный профиль")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
 
-                    Text(accountEmail ?? "Аккаунт не подключён")
+                    Text(user?.resolvedEmail ?? "Аккаунт не подключён")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.55))
                 }

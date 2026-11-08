@@ -146,7 +146,11 @@ enum BiometricAuthError: LocalizedError {
             return "Биометрическая аутентификация недоступна."
 
         case .notEnrolled:
-            return "Face ID или Touch ID не настроен на устройстве."
+            #if os(macOS)
+            return "Touch ID не настроен на устройстве."
+            #else
+            return "Face ID не настроен на устройстве."
+            #endif
 
         case .lockout:
             return "Биометрия заблокирована. Используйте пароль устройства для восстановления доступа."
