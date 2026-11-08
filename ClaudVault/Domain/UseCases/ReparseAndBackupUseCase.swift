@@ -160,6 +160,7 @@ final class ReparseAndBackupUseCase {
         try await updateUploadProgressUseCase.execute(id: uploadSession.id, status: .uploading)
 
         let sessionID = uploadSession.id
+        defer { UploadCancellation.clear(sessionID) }
         let updateProgress = updateUploadProgressUseCase
         let reporter = UploadProgressReporter { bytes in
             Task { @MainActor in
@@ -171,20 +172,37 @@ final class ReparseAndBackupUseCase {
             }
         }
 
+        // Имя облачного файла — `record.fileName` (может отличаться
+        // от имени исходника: пользовательское имя или переименование).
+        let uploadURL = UploadFileNaming.url(
+            for: fileURL,
+            desiredName: record.fileName
+        )
+
         let cloudFile: CloudFile
         do {
-            cloudFile = try await repository(for: record).uploadFile(
-                at: fileURL,
-                parentFolderID: parentFolderID,
-                progressHandler: { fraction in
-                    reporter.report(fraction: fraction, totalBytes: fileSize)
+            cloudFile = try await UploadCancellation.$sessionID
+                .withValue(sessionID) {
+                    try await repository(for: record).uploadFile(
+                        at: uploadURL,
+                        parentFolderID: parentFolderID,
+                        progressHandler: { fraction in
+                            reporter.report(
+                                fraction: fraction,
+                                totalBytes: fileSize
+                            )
+                        }
+                    )
                 }
-            )
         } catch {
+            let cancelled = error is CancellationError
+                || (error as? URLError)?.code == .cancelled
             try? await updateUploadProgressUseCase.execute(id: sessionID, status: .failed)
             try? await updateUploadProgressUseCase.execute(
                 id: sessionID,
-                errorMessage: error.localizedDescription
+                errorMessage: cancelled
+                    ? "Загрузка отменена."
+                    : error.localizedDescription
             )
             throw error
         }

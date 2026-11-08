@@ -1,11 +1,16 @@
 import Foundation
-import CoreImage.CIFilterBuiltins
+import OSLog
 import CoreGraphics
 
 /// ViewModel экрана переноса подключений (QR Guard).
 @MainActor
 @Observable
 final class DeviceTransferViewModel {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "device-transfer"
+    )
 
     enum Mode {
         /// Новое устройство: показывает QR, ждёт зашифрованный пакет.
@@ -17,11 +22,15 @@ final class DeviceTransferViewModel {
     enum Phase: Equatable {
         case idle
         case working
+        /// Сессия создана в Firestore, QR-код рендерится.
+        case generatingQRCode
         case awaitingScan
         /// Пакет расшифрован — ждём подтверждения пользователя
         /// перед записью токенов в Keychain.
         case awaitingRestore
         case completed
+        /// Срок действия сессии истёк — QR больше не действителен.
+        case expired
         case failed(String)
     }
 
@@ -56,17 +65,29 @@ final class DeviceTransferViewModel {
     private let tokenStore: CloudTokenStore
     private let biometricAuth: BiometricAuthService
     private let coordinator: DeviceTransferCoordinator
+    private let qrGenerator: QRCodeGenerator
+
+    /// Задачи активного сценария генератора: создание сессии
+    /// и ожидание пакета. Отменяются в `reset()`/`cancelGenerator()`.
+    private var generatorTask: Task<Void, Never>?
+    private var payloadTask: Task<Void, Never>?
+    /// Поколение сценария генератора: результаты запоздавших
+    /// асинхронных операций не должны перезаписывать состояние
+    /// нового запуска или сброшенного экрана.
+    private var generatorGeneration = 0
 
     init(
         qrService: QRVerificationService,
         tokenStore: CloudTokenStore,
         biometricAuth: BiometricAuthService,
-        coordinator: DeviceTransferCoordinator
+        coordinator: DeviceTransferCoordinator,
+        qrGenerator: QRCodeGenerator = QRCodeGenerator()
     ) {
         self.qrService = qrService
         self.tokenStore = tokenStore
         self.biometricAuth = biometricAuth
         self.coordinator = coordinator
+        self.qrGenerator = qrGenerator
         // Если deep-link пришёл, пока экран уже открыт, обрабатываем
         // его сразу — иначе ссылка пролежит до следующего показа
         // экрана и может оказаться устаревшей.
@@ -79,7 +100,12 @@ final class DeviceTransferViewModel {
 
     func chooseGenerator() {
         mode = .generator
-        Task { await startGenerator() }
+        // Отменяем предыдущий запуск до создания нового — иначе два
+        // beginGeneratorSession могут гоняться за pendingSessionID.
+        generatorTask?.cancel()
+        payloadTask?.cancel()
+        let task = Task { await startGenerator() }
+        generatorTask = task
     }
 
     func chooseScanner() {
@@ -101,28 +127,89 @@ final class DeviceTransferViewModel {
 
     // MARK: - Generator
 
+    /// Полный конвейер генератора, разбитый на этапы:
+    /// создание защищённой сессии → генерация QR-кода → ожидание пакета.
+    /// Каждый этап либо переводит UI в следующее состояние,
+    /// либо завершает его контролируемой ошибкой — бесконечной
+    /// загрузки быть не должно.
     private func startGenerator() async {
+        // Новое поколение: результаты всех предыдущих запусков
+        // (в т.ч. запоздавших после отмены) игнорируются.
+        generatorGeneration += 1
+        let generation = generatorGeneration
+
         phase = .working
         statusMessage = "Создаём защищённую сессию…"
+        qrImage = nil
+        receivedPayload = nil
+        incomingProviders = []
+        restoredProviders = []
+
         do {
+            // Этап 1: защищённая сессия в Firestore (с таймаутом
+            // внутри сервиса — зависший backend не вешает UI).
             let url = try await qrService.beginGeneratorSession()
-            qrImage = Self.qrImage(for: url.absoluteString)
+            guard isActiveGeneration(generation) else { return }
+
+            // Этап 2: рендер QR-кода вне главного потока.
+            phase = .generatingQRCode
+            statusMessage = "Генерируем QR-код…"
+            let image = try await qrGenerator.generate(
+                from: url.absoluteString
+            )
+            guard isActiveGeneration(generation) else { return }
+
+            // Этап 3: QR показан, ждём зашифрованный пакет в фоне.
+            qrImage = image
             phase = .awaitingScan
             statusMessage = "Откройте приложение на старом устройстве и отсканируйте этот код для синхронизации. Код действует 10 минут."
 
-            // Ждём зашифрованный пакет в фоне.
-            Task { [weak self] in
+            payloadTask = Task { [weak self] in
                 guard let self else { return }
-                await self.receivePayload()
+                await self.receivePayload(generation: generation)
             }
         } catch {
-            phase = .failed(error.localizedDescription)
+            // Отмена и устаревшее поколение — не ошибки: состояние
+            // уже принадлежит новому запуску или сброшено вызывающим.
+            guard isActiveGeneration(generation),
+                  !Task.isCancelled,
+                  !(error is CancellationError),
+                  error as? DeviceTransferError != .sessionCancelled
+            else { return }
+            qrService.cancelGeneratorSession()
+            qrImage = nil
+            phase = .failed(failureMessage(for: error))
         }
     }
 
-    private func receivePayload() async {
+    /// Приводит ошибку к понятному пользователю сообщению.
+    /// Доменные ошибки уже содержат готовый русский текст;
+    /// технические NSError (Firestore, Functions, Keychain)
+    /// показываем общим текстом, а детали пишем в лог — иначе
+    /// экран «падает без видимой причины».
+    private func failureMessage(for error: Error) -> String {
+        if let transferError = error as? DeviceTransferError {
+            return transferError.localizedDescription
+        }
+        if let qrError = error as? QRCodeGenerator.GenerationError {
+            return qrError.localizedDescription
+        }
+        Self.logger.error(
+            "Device transfer failed: \(error.localizedDescription, privacy: .public)"
+        )
+        return "Не удалось завершить перенос. Проверьте соединение и попробуйте ещё раз."
+    }
+
+    /// true, пока поколение `generation` остаётся актуальным
+    /// и породившая его задача не отменена.
+    private func isActiveGeneration(_ generation: Int) -> Bool {
+        generation == generatorGeneration && !Task.isCancelled
+    }
+
+    private func receivePayload(generation: Int) async {
         do {
             let payload = try await qrService.awaitTransferredPayload()
+            guard isActiveGeneration(generation) else { return }
             let providers = Self.providerNames(in: payload)
             guard !providers.isEmpty else {
                 phase = .completed
@@ -138,9 +225,20 @@ final class DeviceTransferViewModel {
             phase = .awaitingRestore
             statusMessage = "Получены подключения: \(providers.joined(separator: ", ")). Применить их на этом устройстве?"
         } catch DeviceTransferError.sessionCancelled {
-            // Отмена — не ошибка, состояние уже idle.
+            // Отмена — не ошибка, состояние уже принадлежит
+            // новому запуску или сброшено reset()/cancelGenerator().
+        } catch DeviceTransferError.sessionExpired {
+            // Сессия истекла: QR недействителен, показываем
+            // отдельное состояние с возможностью создать новый код.
+            guard isActiveGeneration(generation) else { return }
+            qrImage = nil
+            phase = .expired
+            statusMessage = DeviceTransferError.sessionExpired
+                .localizedDescription
         } catch {
-            phase = .failed(error.localizedDescription)
+            guard isActiveGeneration(generation) else { return }
+            qrImage = nil
+            phase = .failed(failureMessage(for: error))
         }
     }
 
@@ -148,7 +246,13 @@ final class DeviceTransferViewModel {
     func confirmRestore() {
         guard let payload = receivedPayload else { return }
         do {
-            let restored = try tokenStore.restore(payload)
+            guard let ownerID = CurrentUserContext.shared.ownerID else {
+                throw DeviceTransferError.notAuthenticated
+            }
+            let restored = try tokenStore.restore(
+                payload,
+                ownerID: ownerID
+            )
             restoredProviders = restored
             receivedPayload = nil
             incomingProviders = []
@@ -157,7 +261,7 @@ final class DeviceTransferViewModel {
                 ? "Пакет применён, но подходящих подключений в нём не было."
                 : "Подключения восстановлены: \(restored.joined(separator: ", "))."
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(failureMessage(for: error))
         }
     }
 
@@ -189,6 +293,11 @@ final class DeviceTransferViewModel {
     }
 
     func cancelGenerator() {
+        generatorGeneration += 1
+        generatorTask?.cancel()
+        generatorTask = nil
+        payloadTask?.cancel()
+        payloadTask = nil
         qrService.cancelGeneratorSession()
         receivedPayload = nil
         incomingProviders = []
@@ -235,7 +344,7 @@ final class DeviceTransferViewModel {
             statusMessage = "Подтвердите отправку подключений на новое устройство."
         } catch {
             pendingTransfer = nil
-            phase = .failed(error.localizedDescription)
+            phase = .failed(failureMessage(for: error))
         }
     }
 
@@ -267,7 +376,14 @@ final class DeviceTransferViewModel {
             )
 
             statusMessage = "Собираем подключения…"
-            let payload = tokenStore.collect()
+            // Токены собираются только для текущего пользователя
+            // CloudVault — чужие сессии в пакет не попадают.
+            guard let ownerID = CurrentUserContext.shared.ownerID else {
+                phase = .failed(DeviceTransferError.notAuthenticated
+                    .localizedDescription)
+                return
+            }
+            let payload = await tokenStore.collect(ownerID: ownerID)
             let hasTokens = payload.oneDrive != nil
                 || payload.dropbox != nil
                 || payload.google != nil
@@ -286,26 +402,16 @@ final class DeviceTransferViewModel {
         } catch let error as BiometricAuthError {
             phase = .failed(error.localizedDescription)
         } catch {
-            phase = .failed(error.localizedDescription)
+            phase = .failed(failureMessage(for: error))
         }
     }
 
-    // MARK: - QR rendering
-
-    /// Рендерит строку в CGImage через CIQRCodeGenerator.
-    static func qrImage(for string: String, scale: CGFloat = 8) -> CGImage? {
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(string.utf8)
-        filter.correctionLevel = "M"
-
-        guard let output = filter.outputImage else { return nil }
-        let scaled = output.transformed(
-            by: CGAffineTransform(scaleX: scale, y: scale)
-        )
-        return CIContext().createCGImage(scaled, from: scaled.extent)
-    }
-
     func reset() {
+        generatorGeneration += 1
+        generatorTask?.cancel()
+        generatorTask = nil
+        payloadTask?.cancel()
+        payloadTask = nil
         qrService.cancelGeneratorSession()
         mode = nil
         phase = .idle

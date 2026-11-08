@@ -51,7 +51,7 @@ enum AppTypography{
     )
     static let caption = Font.system(
         .caption2,
-        design: .serif
+        design: .default
     )
 }
 

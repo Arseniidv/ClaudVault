@@ -64,6 +64,10 @@ struct CloudVaultWidget: Widget {
         .description("Занятое место в подключённых облачных хранилищах.")
         #if os(iOS)
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        #elseif os(macOS)
+        // На macOS доступны те же system-семейства плюс ExtraLarge;
+        // accessory-семейств (watchOS/iOS) здесь нет.
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
         #endif
     }
 }
@@ -82,14 +86,13 @@ struct ClaudVaultWidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
-        #if os(iOS)
         if let data = entry.storageData, !data.accounts.isEmpty {
             switch family {
             case .systemSmall:
                 SmallWidgetView(data: data)
             case .systemMedium:
                 MediumWidgetView(data: data)
-            case .systemLarge:
+            case .systemLarge, .systemExtraLarge:
                 LargeWidgetView(data: data)
             default:
                 SmallWidgetView(data: data)
@@ -97,23 +100,6 @@ struct ClaudVaultWidgetEntryView: View {
         } else {
             emptyStateView
         }
-        #else
-        // macOS: виджет поддерживает только accessory-семейства —
-        // показываем компактную сводку.
-        if let data = entry.storageData, !data.accounts.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(String(format: "%.1f", data.totalUsedGB)) ГБ")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                Text("/ \(String(format: "%.0f", data.totalMaxGB)) ГБ")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.5))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        } else {
-            emptyStateView
-        }
-        #endif
     }
 
     private var emptyStateView: some View {
@@ -140,13 +126,25 @@ private struct SmallWidgetView: View {
             ZStack {
                 Circle()
                     .stroke(Color.white.opacity(0.08), lineWidth: 8)
-                Circle()
-                    .trim(from: 0, to: CGFloat(min(max(data.totalUsageFraction, 0), 1)))
-                    .stroke(
-                        WidgetPalette.accent,
-                        style: StrokeStyle(lineWidth: 8, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
+
+                // Сегментированное кольцо: каждый аккаунт занимает
+                // свою дугу пропорционально доле от суммарной ёмкости.
+                ForEach(Array(data.accounts.enumerated()), id: \.element.id) { index, account in
+                    let start = data.accounts.prefix(index).reduce(0.0) {
+                        $0 + min(max(Double($1.usedBytes) / Double(max(data.totalMaxBytes, 1)), 0), 1)
+                    }
+                    let end = min(start + min(max(Double(account.usedBytes) / Double(max(data.totalMaxBytes, 1)), 0), 1), 1)
+
+                    if end > start {
+                        Circle()
+                            .trim(from: start, to: end)
+                            .stroke(
+                                ProviderPalette.color(for: account.provider),
+                                style: StrokeStyle(lineWidth: 8, lineCap: .butt)
+                            )
+                            .rotationEffect(.degrees(-90))
+                    }
+                }
 
                 VStack(spacing: 0) {
                     Text(String(format: "%.1f", data.totalUsedGB))
@@ -189,25 +187,29 @@ private struct MediumWidgetView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.white.opacity(0.08))
-                            .frame(height: 10)
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [WidgetPalette.accent, .blue],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(
-                                width: geo.size.width * CGFloat(min(max(data.totalUsageFraction, 0), 1)),
-                                height: 10
-                            )
+                    HStack(spacing: 0) {
+                        ForEach(data.accounts) { account in
+                            let fraction = data.totalMaxBytes > 0
+                                ? Double(account.usedBytes) / Double(data.totalMaxBytes) : 0
+                            let width = geo.size.width * CGFloat(min(max(fraction, 0), 1))
+
+                            if width > 0 {
+                                Rectangle()
+                                    .fill(ProviderPalette.color(for: account.provider))
+                                    .frame(width: width)
+                            }
+                        }
+
+                        let freeFraction = data.totalMaxBytes > 0
+                            ? max(Double(data.totalMaxBytes - data.totalUsedBytes), 0) / Double(data.totalMaxBytes) : 1
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: geo.size.width * CGFloat(min(max(freeFraction, 0), 1)))
                     }
                 }
                 .frame(height: 10)
+                .clipShape(Capsule())
 
                 HStack {
                     Text("\(String(format: "%.1f", data.totalUsedGB)) ГБ занято")
@@ -321,11 +323,13 @@ private struct AccountRow: View {
     var body: some View {
         Link(destination: Self.deepLink(for: account)) {
             HStack(spacing: 12) {
+                let providerColor = ProviderPalette.color(for: account.provider)
+
                 Image(systemName: Self.iconName(for: account.provider))
                     .font(.system(size: 16))
-                    .foregroundStyle(WidgetPalette.accent)
+                    .foregroundStyle(providerColor)
                     .frame(width: 32, height: 32)
-                    .background(WidgetPalette.surface)
+                    .background(providerColor.opacity(0.12))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -346,7 +350,7 @@ private struct AccountRow: View {
                         .foregroundStyle(.white)
                     ProgressView(value: min(max(account.usageFraction, 0), 1))
                         .progressViewStyle(.linear)
-                        .tint(WidgetPalette.accent)
+                        .tint(providerColor)
                         .frame(width: 64)
                     Text("\(Int(account.usageFraction * 100))%")
                         .font(.system(size: 10))
@@ -393,6 +397,9 @@ private struct ProviderBadge: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            Circle()
+                .fill(ProviderPalette.color(for: provider))
+                .frame(width: 6, height: 6)
             Image(systemName: AccountRow.iconName(for: provider))
                 .font(.system(size: 9))
             Text(AccountRow.providerTitle(for: provider))

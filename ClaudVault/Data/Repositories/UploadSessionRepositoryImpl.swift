@@ -1,96 +1,148 @@
 import Foundation
 import SwiftData
 
-@MainActor
-final class UploadSessionRepositoryImpl: UploadSessionRepository {
+/// Репозиторий сессий загрузки на собственном фоновом `ModelContext`.
+///
+/// Прогресс загрузки обновляется очень часто; выполнять fetch+save
+/// на `mainContext` главного потока нельзя — это приводит к зависанию
+/// UI и падениям внутри SwiftData. Выделенный контекст сериализуется
+/// через `NSLock`, поэтому все обращения к нему безопасны с любого
+/// потока, а `@Model`-объекты никогда не покидают репозиторий
+/// (наружу уходят только доменные `UploadSession`).
+final class UploadSessionRepositoryImpl: UploadSessionRepository, @unchecked Sendable {
+    private let lock = NSLock()
     private let modelContext: ModelContext
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+    /// Сигнал о сохранении сессии — будит мониторинг
+    /// Live Activities, чтобы активность появилась без
+    /// ожидания очередного тика опроса.
+    var onSessionChange: (@Sendable () -> Void)?
+
+    /// Владелец данных; nil — сеанса нет, репозиторий пуст.
+    private var ownerID: String? {
+        CurrentUserContext.shared.ownerID
+    }
+
+    init(modelContainer: ModelContainer) {
+        self.modelContext = ModelContext(modelContainer)
     }
 
     func save(_ session: UploadSession) async throws {
-        let model = UploadSessionModelMapper.toModel(session)
-        modelContext.insert(model)
-        try modelContext.save()
+        try perform { context in
+            let model = UploadSessionModelMapper.toModel(session)
+            model.ownerID = ownerID ?? ""
+            context.insert(model)
+            try context.save()
+        }
+        onSessionChange?()
     }
 
     func fetchAll() async throws -> [UploadSession] {
-        let descriptor = FetchDescriptor<UploadSessionModel>()
-        let models = try modelContext.fetch(descriptor)
-        return models.map { UploadSessionModelMapper.toDomain($0) }
+        guard let ownerID else { return [] }
+        return try perform { context in
+            let descriptor = FetchDescriptor<UploadSessionModel>(
+                predicate: #Predicate { $0.ownerID == ownerID }
+            )
+            return try context.fetch(descriptor)
+                .map { UploadSessionModelMapper.toDomain($0) }
+        }
     }
 
     func fetch(id: UUID) async throws -> UploadSession? {
-        let descriptor = FetchDescriptor<UploadSessionModel>(
-            predicate: #Predicate { $0.id == id }
-        )
-        let models = try modelContext.fetch(descriptor)
-        return models.first.map { UploadSessionModelMapper.toDomain($0) }
+        guard let ownerID else { return nil }
+        return try perform { context in
+            let descriptor = FetchDescriptor<UploadSessionModel>(
+                predicate: #Predicate {
+                    $0.id == id && $0.ownerID == ownerID
+                }
+            )
+            return try context.fetch(descriptor)
+                .first
+                .map { UploadSessionModelMapper.toDomain($0) }
+        }
     }
 
     func updateProgress(id: UUID, uploadedBytes: Int64) async throws {
-        let descriptor = FetchDescriptor<UploadSessionModel>(
-            predicate: #Predicate { $0.id == id }
-        )
-        guard let model = try modelContext.fetch(descriptor).first else {
-            throw NSError(domain: "UploadSessionRepository", code: 404)
-        }
+        try perform { context in
+            guard let model = try fetchModel(id: id, in: context) else {
+                throw NSError(domain: "UploadSessionRepository", code: 404)
+            }
 
-        model.uploadedBytes = uploadedBytes
-        model.updatedAt = .now
-        try modelContext.save()
+            model.uploadedBytes = uploadedBytes
+            model.updatedAt = .now
+            try context.save()
+        }
     }
 
     func updateStatus(id: UUID, status: SessionStatus) async throws {
-        let descriptor = FetchDescriptor<UploadSessionModel>(
-            predicate: #Predicate { $0.id == id }
-        )
-        guard let model = try modelContext.fetch(descriptor).first else {
-            throw NSError(domain: "UploadSessionRepository", code: 404)
-        }
+        try perform { context in
+            guard let model = try fetchModel(id: id, in: context) else {
+                throw NSError(domain: "UploadSessionRepository", code: 404)
+            }
 
-        model.statusRaw = status.rawValue
-        model.updatedAt = .now
-        try modelContext.save()
+            model.statusRaw = status.rawValue
+            model.updatedAt = .now
+            try context.save()
+        }
     }
 
     func updateErrorMessage(id: UUID, errorMessage: String?) async throws {
-        let descriptor = FetchDescriptor<UploadSessionModel>(
-            predicate: #Predicate { $0.id == id }
-        )
-        guard let model = try modelContext.fetch(descriptor).first else {
-            throw NSError(domain: "UploadSessionRepository", code: 404)
-        }
+        try perform { context in
+            guard let model = try fetchModel(id: id, in: context) else {
+                throw NSError(domain: "UploadSessionRepository", code: 404)
+            }
 
-        model.errorMessage = errorMessage
-        model.updatedAt = .now
-        try modelContext.save()
+            model.errorMessage = errorMessage
+            model.updatedAt = .now
+            try context.save()
+        }
     }
 
     func delete(id: UUID) async throws {
-        let descriptor = FetchDescriptor<UploadSessionModel>(
-            predicate: #Predicate { $0.id == id }
-        )
-        guard let model = try modelContext.fetch(descriptor).first else {
-            return
-        }
+        try perform { context in
+            guard let model = try fetchModel(id: id, in: context) else {
+                return
+            }
 
-        modelContext.delete(model)
-        try modelContext.save()
+            context.delete(model)
+            try context.save()
+        }
     }
 
     func deleteCompleted() async throws {
-        let descriptor = FetchDescriptor<UploadSessionModel>(
-            predicate: #Predicate { $0.statusRaw == "completed" }
-        )
-        let models = try modelContext.fetch(descriptor)
+        guard let ownerID else { return }
+        try perform { context in
+            let descriptor = FetchDescriptor<UploadSessionModel>(
+                predicate: #Predicate {
+                    $0.statusRaw == "completed" && $0.ownerID == ownerID
+                }
+            )
+            let models = try context.fetch(descriptor)
 
-        for model in models {
-            modelContext.delete(model)
+            for model in models {
+                context.delete(model)
+            }
+
+            try context.save()
         }
+    }
 
-        try modelContext.save()
+    // MARK: - Private
+
+    private func perform<T>(_ work: (ModelContext) throws -> T) throws -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try work(modelContext)
+    }
+
+    private func fetchModel(
+        id: UUID,
+        in context: ModelContext
+    ) throws -> UploadSessionModel? {
+        let descriptor = FetchDescriptor<UploadSessionModel>(
+            predicate: #Predicate { $0.id == id }
+        )
+        return try context.fetch(descriptor).first
     }
 }
 

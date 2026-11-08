@@ -30,6 +30,9 @@ final class TransferRecordModel {
     var createdAt: Date
     var updatedAt: Date
 
+    /// Владелец записи — пользователь CloudVault.
+    var ownerID: String
+
     init(record: TransferRecord) {
         self.id = record.id
         self.kindRaw = record.kind.rawValue
@@ -51,6 +54,7 @@ final class TransferRecordModel {
         self.errorMessage = record.errorMessage
         self.createdAt = record.createdAt
         self.updatedAt = record.updatedAt
+        self.ownerID = CurrentUserContext.shared.ownerID ?? ""
     }
 
     func asRecord() -> TransferRecord {

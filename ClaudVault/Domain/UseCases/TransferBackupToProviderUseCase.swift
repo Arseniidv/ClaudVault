@@ -173,7 +173,11 @@ final class TransferBackupToProviderUseCase {
         )
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let localURL = tempDir.appendingPathComponent(file.name)
+        let safeName = SafeFileName.sanitized(
+            file.name,
+            fallback: "download-\(UUID().uuidString)"
+        )
+        let localURL = tempDir.appendingPathComponent(safeName)
         try await sourceRepo.downloadFile(
             id: file.id,
             to: localURL,

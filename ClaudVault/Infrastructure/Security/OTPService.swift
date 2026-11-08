@@ -25,11 +25,34 @@ final class OTPService {
 
     private let functions = Functions.functions()
 
+    /// Ключ UserDefaults с учётом текущего пользователя CloudVault.
+    /// Без этого 2FA-флаг и «доверенное окно» одного аккаунта
+    /// наследовались бы следующим после logout/login — окно,
+    /// открытое пользователем A, позволяло бы B подключать облака
+    /// без OTP. При отсутствии владельца (до входа) используется
+    /// легаси-ключ без суффикса.
+    static func scopedKey(_ base: String) -> String {
+        guard let ownerID = CurrentUserContext.shared.ownerID,
+              !ownerID.isEmpty else {
+            return base
+        }
+        return "\(base).\(ownerID)"
+    }
+
     // MARK: - 2FA flag
 
     var isTwoFactorEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.twoFactorEnabledKey) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.twoFactorEnabledKey) }
+        get {
+            UserDefaults.standard.bool(
+                forKey: Self.scopedKey(Self.twoFactorEnabledKey)
+            )
+        }
+        set {
+            UserDefaults.standard.set(
+                newValue,
+                forKey: Self.scopedKey(Self.twoFactorEnabledKey)
+            )
+        }
     }
 
     // MARK: - Trust window
@@ -38,7 +61,7 @@ final class OTPService {
     /// (сервер подтвердил код, клиент хранит срок действия окна).
     var isRecentlyVerified: Bool {
         let until = UserDefaults.standard.double(
-            forKey: Self.verifiedUntilKey
+            forKey: Self.scopedKey(Self.verifiedUntilKey)
         )
         return until > Date().timeIntervalSince1970
     }
@@ -77,6 +100,9 @@ final class OTPService {
         guard let validUntil = (data?["validUntil"] as? NSNumber)?.doubleValue else {
             throw OTPServiceError.invalidResponse
         }
-        UserDefaults.standard.set(validUntil, forKey: Self.verifiedUntilKey)
+        UserDefaults.standard.set(
+            validUntil,
+            forKey: Self.scopedKey(Self.verifiedUntilKey)
+        )
     }
 }

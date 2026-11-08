@@ -1,5 +1,8 @@
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct SettingsView: View {
     @ObservedObject var authViewModel: AuthViewModel
@@ -10,20 +13,52 @@ struct SettingsView: View {
     @State private var integrityCheckEnabled = true
     @AppStorage("biometricLockEnabled")
     private var biometricLockEnabled = false
-    @AppStorage("twoFactorEnabled")
-    private var twoFactorEnabled = false
+    #if os(macOS)
+    private let biometricLockSubtitle = "Защита приложения с помощью Touch ID"
+    private let biometricLockIcon = "touchid"
+    #else
+    private let biometricLockSubtitle = "Защита приложения с помощью Face ID"
+    private let biometricLockIcon = "faceid"
+    #endif
+    #if os(macOS)
+    /// Radial Menu: глобальная клавиша, Extended Mode
+    /// (Accessibility API для чтения выделения чужих приложений)
+    /// и множественное добавление файлов.
+    @AppStorage(RadialMenuAppIntegration.Keys.hotKeyEnabled)
+    private var radialHotKeyEnabled = true
+    @AppStorage(RadialMenuAppIntegration.Keys.hotKeyPreset)
+    private var radialHotKeyPresetRaw = RadialHotKeyPreset
+        .optionSpace.rawValue
+    @AppStorage(RadialMenuAppIntegration.Keys.extendedSelection)
+    private var radialExtendedSelection = false
+    @AppStorage(RadialMenuAppIntegration.Keys.multiFileSelection)
+    private var radialMultiFileSelection = true
+    #endif
+    /// 2FA-флаг хранится per-owner — ключ вычисляется при
+    /// создании view (SettingsView пересоздаётся при смене
+    /// пользователя, т.к. живёт внутри mainAppView).
+    @AppStorage private var twoFactorEnabled: Bool
     @State private var otpCode = ""
     @State private var showAbout = false
+
+    init(
+        authViewModel: AuthViewModel,
+        deviceTransferCoordinator: DeviceTransferCoordinator? = nil
+    ) {
+        _authViewModel = ObservedObject(wrappedValue: authViewModel)
+        self.deviceTransferCoordinator = deviceTransferCoordinator
+        _twoFactorEnabled = AppStorage(
+            wrappedValue: false,
+            OTPService.scopedKey(OTPService.twoFactorEnabledKey)
+        )
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 SettingsHeaderView()
 
-                SettingsProfileView(
-                    accountName: authViewModel.currentUser?.displayName,
-                    accountEmail: authViewModel.currentUser?.email
-                )
+                SettingsProfileView(authViewModel: authViewModel)
 
                 settingsSection(
                     title: "Резервное копирование",
@@ -50,8 +85,8 @@ struct SettingsView: View {
 
                     SettingsToggleRow(
                         title: "Биометрическая защита",
-                        subtitle: "Защита приложения с помощью Face ID",
-                        icon: "faceid",
+                        subtitle: biometricLockSubtitle,
+                        icon: biometricLockIcon,
                         isOn: $biometricLockEnabled
                     )
                     emailVerificationRow
@@ -119,6 +154,62 @@ struct SettingsView: View {
                     )
                 }
 
+                #if os(macOS)
+                settingsSection(
+                    title: "Radial Menu",
+                    icon: "circle.grid.3x3"
+                ) {
+                    SettingsToggleRow(
+                        title: "Горячая клавиша",
+                        subtitle: radialHotKeySubtitle,
+                        icon: "keyboard",
+                        isOn: Binding(
+                            get: { radialHotKeyEnabled },
+                            set: { newValue in
+                                radialHotKeyEnabled = newValue
+                                RadialMenuAppIntegration
+                                    .setHotKeyEnabled(newValue)
+                            }
+                        )
+                    )
+
+                    hotKeyPresetRow
+
+                    SettingsToggleRow(
+                        title: "Выделение в других приложениях",
+                        subtitle: "⌥Space читает выбранные файлы через Accessibility API (Finder, Preview, браузеры)",
+                        icon: "hand.raised",
+                        isOn: Binding(
+                            get: { radialExtendedSelection },
+                            set: { newValue in
+                                radialExtendedSelection = newValue
+                                RadialMenuAppIntegration
+                                    .setExtendedSelectionEnabled(newValue)
+                                if newValue,
+                                   !AccessibilityPermissionManager.isTrusted {
+                                    AccessibilityPermissionManager
+                                        .requestAccess()
+                                }
+                            }
+                        )
+                    )
+
+                    SettingsToggleRow(
+                        title: "Добавление файлов",
+                        subtitle: "Кнопка «+» в меню — выбор файлов с диска, несколько сразу",
+                        icon: "plus.rectangle.on.rectangle",
+                        isOn: Binding(
+                            get: { radialMultiFileSelection },
+                            set: { newValue in
+                                radialMultiFileSelection = newValue
+                                RadialMenuAppIntegration
+                                    .setMultiFileSelectionEnabled(newValue)
+                            }
+                        )
+                    )
+                }
+                #endif
+
                 aboutButton
 
                 if authViewModel.currentUser != nil {
@@ -176,6 +267,74 @@ struct SettingsView: View {
             Text("Введите 6-значный код из письма, отправленного на вашу почту.")
         }
     }
+
+    #if os(macOS)
+    /// Подзаголовок строки хоткея: выбранный пресет
+    /// и состояние регистрации Carbon-обработчика
+    /// (комбинация может быть занята).
+    private var radialHotKeySubtitle: String {
+        let preset = RadialHotKeyPreset(
+            rawValue: radialHotKeyPresetRaw
+        ) ?? .optionSpace
+        guard radialHotKeyEnabled else { return "Выключена" }
+        if !GlobalHotKeyManager.shared.isRegistered {
+            return "\(preset.title) занята другим приложением"
+        }
+        return "\(preset.title) — вызвать Radial Menu"
+    }
+
+    /// Строка выбора пресета сочетания клавиш.
+    private var hotKeyPresetRow: some View {
+        let preset = RadialHotKeyPreset(
+            rawValue: radialHotKeyPresetRaw
+        ) ?? .optionSpace
+        return HStack(spacing: 12) {
+            Image(systemName: "command")
+                .font(.system(size: 17))
+                .foregroundStyle(.cyan)
+                .frame(width: 36, height: 36)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Сочетание клавиш")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+
+                Text("Вызов Radial Menu")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+
+            Spacer()
+
+            Menu {
+                ForEach(RadialHotKeyPreset.allCases) { option in
+                    Button {
+                        radialHotKeyPresetRaw = option.rawValue
+                        RadialMenuAppIntegration
+                            .setHotKeyPreset(option)
+                    } label: {
+                        if option == preset {
+                            Label(option.title, systemImage: "checkmark")
+                        } else {
+                            Text(option.title)
+                        }
+                    }
+                }
+            } label: {
+                Text(preset.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.cyan)
+                    .clipShape(Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+        .padding(14)
+    }
+    #endif
 
     private var aboutButton: some View {
         Button {

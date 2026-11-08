@@ -10,6 +10,11 @@ final class CloudFileCacheRepository {
 
     private let modelContext: ModelContext
 
+    /// Владелец данных; nil — сеанса нет, кэш пуст.
+    private var ownerID: String? {
+        CurrentUserContext.shared.ownerID
+    }
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
@@ -22,10 +27,13 @@ final class CloudFileCacheRepository {
     ) {
         let key = parentFolderID
         let providerRaw = provider.rawValue
+        guard let ownerID else { return }
 
         let descriptor = FetchDescriptor<CloudFileModel>(
             predicate: #Predicate {
-                $0.provider == providerRaw && $0.parentFolderID == key
+                $0.provider == providerRaw
+                    && $0.parentFolderID == key
+                    && $0.ownerID == ownerID
             }
         )
         if let stale = try? modelContext.fetch(descriptor) {
@@ -35,13 +43,13 @@ final class CloudFileCacheRepository {
         }
 
         for file in files {
-            modelContext.insert(
-                CloudFileModel.make(
-                    from: file,
-                    provider: providerRaw,
-                    parentFolderID: key
-                )
+            let model = CloudFileModel.make(
+                from: file,
+                provider: providerRaw,
+                parentFolderID: key
             )
+            model.ownerID = ownerID
+            modelContext.insert(model)
         }
         try? modelContext.save()
     }
@@ -50,10 +58,12 @@ final class CloudFileCacheRepository {
         provider: StorageProviderType,
         parentFolderID: String
     ) -> [CloudFile] {
+        guard let ownerID else { return [] }
         let descriptor = FetchDescriptor<CloudFileModel>(
             predicate: #Predicate {
                 $0.provider == provider.rawValue
                     && $0.parentFolderID == parentFolderID
+                    && $0.ownerID == ownerID
             },
             sortBy: [SortDescriptor(\.name)]
         )
@@ -62,8 +72,11 @@ final class CloudFileCacheRepository {
     }
 
     func clear(provider: StorageProviderType) {
+        guard let ownerID else { return }
         let descriptor = FetchDescriptor<CloudFileModel>(
-            predicate: #Predicate { $0.provider == provider.rawValue }
+            predicate: #Predicate {
+                $0.provider == provider.rawValue && $0.ownerID == ownerID
+            }
         )
         if let stale = try? modelContext.fetch(descriptor) {
             for model in stale {

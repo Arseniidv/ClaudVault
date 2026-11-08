@@ -8,15 +8,13 @@ enum BackupCreationRequest: Equatable {
     case pickFile
     /// Открыть камеру-сканер документов.
     case scanDocument
+    /// Открыть выбор папки для загрузки в облако (macOS-меню «+»).
+    case pickFolder
+    /// Запросить создание новой папки в текущем облаке.
+    case newFolder
+    /// Запросить подключение облачного провайдера.
+    case connectCloud(StorageProviderType)
 }
-
-/// Передаёт запрос на создание бэкапа из `RootView` (обработчик URL)
-/// в `BackupListView`, который владеет sheet'ами создания бэкапа
-/// и сканера.
-///
-/// Запрос не сбрасывается при чтении: если пользователь не авторизован
-/// и `BackupListView` ещё не существует, запрос дождётся его появления
-/// после входа в аккаунт.
 @MainActor
 @Observable
 final class BackupActionRouter {

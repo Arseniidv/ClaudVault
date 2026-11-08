@@ -240,10 +240,7 @@ struct CreateBackupView: View {
                         .lineLimit(2)
 
                     if let fileSize = viewModel.fileSize {
-                        Text(ByteCountFormatter.string(
-                            fromByteCount: fileSize,
-                            countStyle: .file
-                        ))
+                        Text(ByteFormatting.string(fromByteCount: fileSize))
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.5))
                     }
@@ -257,6 +254,20 @@ struct CreateBackupView: View {
             .padding(16)
             .background(Color.white.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Имя файла")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+
+                TextField("Имя файла", text: $viewModel.editableFileName)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .disabled(viewModel.isProgressing)
+            }
 
             if let checksum = viewModel.checksum {
                 VStack(alignment: .leading, spacing: 6) {

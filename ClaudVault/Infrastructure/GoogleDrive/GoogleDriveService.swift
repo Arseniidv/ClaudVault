@@ -78,24 +78,35 @@ final class GoogleDriveService {
         guard !trimmed.isEmpty else { return [] }
 
         let escaped = Self.escapeQueryLiteral(trimmed)
-        guard let requestURL = makeURL(
-            path: "files",
-            queryItems: [
+        var result: [CloudFile] = []
+        var pageToken: String?
+
+        repeat {
+            var items = [
                 URLQueryItem(
                     name: "q",
                     value: "name contains '\(escaped)' and trashed = false"
                 ),
-                URLQueryItem(name: "pageSize", value: "50"),
+                URLQueryItem(name: "pageSize", value: "100"),
                 URLQueryItem(name: "orderBy", value: "modifiedTime desc"),
-                URLQueryItem(name: "fields", value: "files(\(Self.fileFields))")
+                URLQueryItem(name: "fields", value: "nextPageToken,files(\(Self.fileFields))")
             ]
-        ) else { throw CloudStorageError.invalidResponse }
+            if let pageToken {
+                items.append(URLQueryItem(name: "pageToken", value: pageToken))
+            }
+            guard let requestURL = makeURL(path: "files", queryItems: items) else {
+                throw CloudStorageError.invalidResponse
+            }
 
-        let data = try await send(requestURL)
-        guard let page = try? JSONDecoder().decode(FileListResponse.self, from: data) else {
-            throw CloudStorageError.invalidResponse
-        }
-        return page.files.map { $0.asCloudFile }
+            let data = try await send(requestURL)
+            guard let page = try? JSONDecoder().decode(FileListResponse.self, from: data) else {
+                throw CloudStorageError.invalidResponse
+            }
+            result += page.files.map { $0.asCloudFile }
+            pageToken = page.nextPageToken
+        } while pageToken != nil
+
+        return result
     }
 
     func fileMetadata(id: String) async throws -> CloudFile {
@@ -105,6 +116,27 @@ final class GoogleDriveService {
         ) else { throw CloudStorageError.invalidResponse }
 
         let data = try await send(requestURL)
+        guard let decoded = try? JSONDecoder().decode(FileDTO.self, from: data) else {
+            throw CloudStorageError.invalidResponse
+        }
+        return decoded.asCloudFile
+    }
+
+    /// PATCH `files/{id}` — переименование без перезагрузки
+    /// содержимого. id объекта не меняется.
+    func renameFile(id: String, name: String) async throws -> CloudFile {
+        guard let requestURL = makeURL(
+            path: "files/\(Self.encodePathSegment(id))",
+            queryItems: [URLQueryItem(name: "fields", value: Self.fileFields)]
+        ) else { throw CloudStorageError.invalidResponse }
+
+        let body = try JSONSerialization.data(withJSONObject: ["name": name])
+        let data = try await send(
+            requestURL,
+            method: "PATCH",
+            body: body,
+            contentType: "application/json; charset=UTF-8"
+        )
         guard let decoded = try? JSONDecoder().decode(FileDTO.self, from: data) else {
             throw CloudStorageError.invalidResponse
         }
@@ -288,7 +320,7 @@ final class GoogleDriveService {
         
         // do/while-семантика: пустой файл (0 байт) тоже должен пройти один запрос.
         while true {
-            try Task.checkCancellation()
+            try UploadCancellation.checkCancellation()
             do {
                 let result = try await uploadChunk(
                     sessionURL: sessionURL,
@@ -471,7 +503,7 @@ final class GoogleDriveService {
         }
 
         while uploadedBytes < sizeBytes {
-            try Task.checkCancellation()
+            try UploadCancellation.checkCancellation()
             guard let chunk = try await readChunk(), !chunk.isEmpty else {
                 throw CloudStorageError.operationFailed(
                     "Источник оборвал передачу данных."

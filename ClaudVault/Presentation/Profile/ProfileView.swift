@@ -2,7 +2,16 @@
 import SwiftUI
 
 struct ProfileView: View {
-    @State private var viewModel = ProfileViewModel()
+    @ObservedObject var authViewModel: AuthViewModel
+    @State private var viewModel: ProfileViewModel
+
+    init(authViewModel: AuthViewModel) {
+        _authViewModel = ObservedObject(wrappedValue: authViewModel)
+        _viewModel = State(
+            wrappedValue: ProfileViewModel(authViewModel: authViewModel)
+        )
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -39,11 +48,11 @@ struct ProfileView: View {
                 .foregroundStyle(.cyan)
 
             VStack(spacing: 5) {
-                Text(viewModel.name)
+                Text(viewModel.displayName)
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
 
-                Text(viewModel.email)
+                Text(viewModel.accountEmail)
                     .font(.system(size: 14))
                     .foregroundStyle(.white.opacity(0.5))
             }
@@ -70,11 +79,12 @@ struct ProfileView: View {
             VStack(spacing: 14) {
                 profileField(
                     title: "Имя",
-                    value: $viewModel.name
+                    value: $viewModel.editableName
                 )
                 profileField(
                     title: "Электронная почта",
-                    value: $viewModel.email
+                    value: .constant(viewModel.accountEmail),
+                    isEditable: false
                 )
             }
             .padding(16)
@@ -85,14 +95,16 @@ struct ProfileView: View {
                     Button("Отмена") {
                         viewModel.cancelEditing()
                     }
+                    .disabled(authViewModel.isLoading)
                     .frame(maxWidth: .infinity)
                     .padding(13)
                     .background(Color.white.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                     Button("Сохранить") {
-                        viewModel.saveProfile()
+                        Task { await viewModel.saveProfile() }
                     }
+                    .disabled(authViewModel.isLoading)
                     .frame(maxWidth: .infinity)
                     .padding(13)
                     .background(Color.cyan)
@@ -135,7 +147,7 @@ struct ProfileView: View {
 
                 informationRow(
                     title: "Статус аккаунта",
-                    value: "Активен",
+                    value: viewModel.accountStatus,
                     icon: "checkmark.shield"
                 )
             }
@@ -188,7 +200,8 @@ struct ProfileView: View {
 
     private func profileField(
         title: String,
-        value: Binding<String>
+        value: Binding<String>,
+        isEditable: Bool = true
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
 
@@ -196,7 +209,7 @@ struct ProfileView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.5))
 
-            if viewModel.isEditing {
+            if isEditable && viewModel.isEditing {
                 TextField(title, text: value)
                     .font(.system(size: 14))
                     .foregroundStyle(.white)

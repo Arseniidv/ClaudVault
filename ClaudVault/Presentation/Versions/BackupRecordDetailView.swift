@@ -4,10 +4,12 @@ import SwiftUI
 /// исходного файла и удаление версии/всей копии.
 struct BackupRecordDetailView: View {
     @State private var viewModel: BackupVersionsViewModel
+    @State private var renameText = ""
     @Environment(\.dismiss) private var dismiss
 
     init(viewModel: BackupVersionsViewModel) {
         _viewModel = State(initialValue: viewModel)
+        _renameText = State(initialValue: viewModel.record.fileName)
     }
 
     var body: some View {
@@ -15,6 +17,7 @@ struct BackupRecordDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     recordHeader
+                    renameSection
                     reparseSection
                     transferSection
                     versionsSection
@@ -43,6 +46,11 @@ struct BackupRecordDetailView: View {
             .task { viewModel.loadVersions() }
             .onChange(of: viewModel.recordDeleted) { _, deleted in
                 if deleted { dismiss() }
+            }
+            // После успешного переименования синхронизируем поле
+            // с фактическим именем (могло дописаться расширение).
+            .onChange(of: viewModel.record.fileName) { _, newName in
+                renameText = newName
             }
             .alert(
                 "Ошибка",
@@ -119,6 +127,45 @@ struct BackupRecordDetailView: View {
                     .padding(.vertical, 5)
                     .background(Color.white.opacity(0.07))
                     .clipShape(Capsule())
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.045))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    // MARK: - Rename
+
+    /// Переименование копии: меняет имя в приложении и в облаке
+    /// без создания новой версии или повторной загрузки.
+    private var renameSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Имя файла")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+
+            HStack(spacing: 10) {
+                TextField("Имя файла", text: $renameText)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .disabled(viewModel.isMutating)
+
+                Button("Сохранить") {
+                    viewModel.renameRecord(to: renameText)
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.blue)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .disabled(
+                    viewModel.isMutating ||
+                    renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
             }
         }
         .padding(16)
@@ -290,7 +337,7 @@ struct BackupRecordDetailView: View {
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.white)
 
-                Text("\(Self.byteFormatter.string(fromByteCount: version.fileSize)) · SHA-256 \(version.checksum.prefix(8))…")
+                Text("\(ByteFormatting.string(fromByteCount: version.fileSize)) · SHA-256 \(version.checksum.prefix(8))…")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.5))
                     .lineLimit(1)
@@ -337,10 +384,4 @@ struct BackupRecordDetailView: View {
         .buttonStyle(.plain)
         .disabled(viewModel.isMutating)
     }
-
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 }

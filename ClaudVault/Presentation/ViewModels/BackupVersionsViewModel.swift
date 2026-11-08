@@ -9,6 +9,7 @@ final class BackupVersionsViewModel {
     private let deleteBackupUseCase: DeleteBackupUseCase?
     private let reparseAndBackupUseCase: ReparseAndBackupUseCase?
     private let transferBackupToProvider: TransferBackupToProviderUseCase?
+    private let renameBackupUseCase: RenameBackupUseCase?
     private let backupMetadataRepository: BackupMetadataRepository?
 
     private(set) var record: BackupRecord
@@ -38,6 +39,7 @@ final class BackupVersionsViewModel {
         deleteBackupUseCase: DeleteBackupUseCase? = nil,
         reparseAndBackupUseCase: ReparseAndBackupUseCase? = nil,
         transferBackupToProvider: TransferBackupToProviderUseCase? = nil,
+        renameBackupUseCase: RenameBackupUseCase? = nil,
         transferTargets: [StorageProviderType] = [],
         backupMetadataRepository: BackupMetadataRepository? = nil
     ) {
@@ -46,6 +48,7 @@ final class BackupVersionsViewModel {
         self.deleteBackupUseCase = deleteBackupUseCase
         self.reparseAndBackupUseCase = reparseAndBackupUseCase
         self.transferBackupToProvider = transferBackupToProvider
+        self.renameBackupUseCase = renameBackupUseCase
         self.transferTargets = transferTargets.filter {
             $0 != record.storageProvider && $0 != .unknown
         }
@@ -140,9 +143,9 @@ final class BackupVersionsViewModel {
                     record: record,
                     to: target,
                     move: move
-                ) { [weak self] fraction in
+                ) { fraction in
                     Task { @MainActor in
-                        self?.transferProgress = fraction
+                        self.transferProgress = fraction
                     }
                 }
 
@@ -163,6 +166,29 @@ final class BackupVersionsViewModel {
                     : "Копия создана в \(target.name)."
             } catch is CancellationError {
                 // Отмена — не ошибка, просто выходим.
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Переименование записи: облачные объекты всех версий
+    /// и отображаемое имя. Новая версия/копия не создаётся.
+    func renameRecord(to newName: String) {
+        guard let renameBackupUseCase, !isMutating else { return }
+        isMutating = true
+        errorMessage = nil
+        infoMessage = nil
+
+        Task {
+            defer { isMutating = false }
+            do {
+                record = try await renameBackupUseCase.execute(
+                    record: record,
+                    newName: newName
+                )
+                onDataChanged?()
+                infoMessage = "Имя обновлено."
             } catch {
                 errorMessage = error.localizedDescription
             }

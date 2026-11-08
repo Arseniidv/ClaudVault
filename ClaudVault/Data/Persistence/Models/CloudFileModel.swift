@@ -26,6 +26,9 @@ final class CloudFileModel {
 
     var updatedAt: Date
 
+    /// Владелец записи — пользователь CloudVault.
+    var ownerID: String
+
     init(
         provider: String,
         remoteID: String,
@@ -37,7 +40,8 @@ final class CloudFileModel {
         thumbnailURL: String? = nil,
         thumbnailPath: String? = nil,
         duration: Double? = nil,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        ownerID: String = ""
     ) {
         self.provider = provider
         self.remoteID = remoteID
@@ -50,6 +54,7 @@ final class CloudFileModel {
         self.thumbnailPath = thumbnailPath
         self.duration = duration
         self.updatedAt = updatedAt
+        self.ownerID = ownerID
     }
 
     func asCloudFile() -> CloudFile {

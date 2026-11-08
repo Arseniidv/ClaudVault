@@ -2,8 +2,8 @@ import Foundation
 
 enum AppConfiguration{
     static let name = "ClaudVault"
-    static let bunfleIdentificator = Bundle.main.bundleIdentifier ?? ""
-    
+    static let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+
     static var version:String{
         Bundle.main.infoDictionary?[
             "CFBundleShortVersionString"

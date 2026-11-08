@@ -14,6 +14,14 @@ final class TransferEngine {
     /// Вызывается при изменении прогресса активной передачи (0...1).
     var onProgress: (@Sendable (Double) -> Void)?
 
+    /// Флаг отмены, выставляемый `cancelActive()`.
+    ///
+    /// `Task.checkCancellation` в цикле движка ловит только отмену
+    /// внешней задачи — у вызовов из UseCase'ов (создание бэкапа,
+    /// перенос бэкапа между облаками) такой задачи нет, поэтому
+    /// движок проверяет этот флаг на каждой итерации.
+    private var cancelRequested = false
+
     init(journal: TransferJournal, chunkSize: Int64 = 8 * 1024 * 1024) {
         self.journal = journal
         self.chunkSize = chunkSize
@@ -188,7 +196,7 @@ final class TransferEngine {
             totalSize: record.sizeBytes
         )
 
-        let uploaded = try await runUpload(
+        _ = try await runUpload(
             record: record,
             source: source,
             target: target,
@@ -221,7 +229,7 @@ final class TransferEngine {
                 ? nil : record.targetParentID
         )
 
-        let uploaded = try await runUpload(
+        _ = try await runUpload(
             record: record,
             source: chunkSource,
             target: target,
@@ -235,12 +243,14 @@ final class TransferEngine {
         try await journal.delete(id: record.id)
     }
 
-    /// Отмена текущей передачи: бросает задачу-цикл через Task
-    /// и помечает запись отменённой.
+    /// Отмена текущей передачи: выставляет флаг, который цикл
+    /// движка проверяет на каждой итерации, и помечает запись
+    /// отменённой. Остановка происходит на ближайшей границе
+    /// чанка — уже отправленный провайдеру фрагмент не прерываем.
     func cancelActive() async {
         guard let id = activeRecordID else { return }
+        cancelRequested = true
         try? await journal.setState(id: id, state: .cancelled)
-        // Task.checkCancellation в цикле движка завершит передачу.
     }
 
     // MARK: - Private
@@ -282,6 +292,10 @@ final class TransferEngine {
         parentFolderID: String?,
         existingSession: (session: any TransferSession, state: String)? = nil
     ) async throws -> CloudFile {
+        // Сбрасываем флаг отмены в начале каждой передачи:
+        // предыдущая отмена не должна убивать следующую загрузку.
+        cancelRequested = false
+
         let made: (session: any TransferSession, state: String)?
         if let existingSession {
             made = existingSession
@@ -313,6 +327,9 @@ final class TransferEngine {
             source: hashingSource,
             session: session,
             chunkSize: chunkSize,
+            shouldCancel: { [weak self] in
+                self?.cancelRequested ?? false
+            },
             onConfirmedOffset: { offset in
                 try await journal.updateProgress(
                     id: recordID,
@@ -386,10 +403,14 @@ enum ChunkedUploadRunner {
 
     /// Запускает передачу до `source.totalSize`. `onConfirmedOffset`
     /// вызывается после каждого принятого провайдером фрагмента.
+    /// `shouldCancel` — дополнительная проверка отмены (например,
+    /// флаг `TransferEngine.cancelActive`), срабатывает на границе
+    /// каждого чанка и перед `finish()`.
     static func run(
         source: any ChunkSource,
         session: any TransferSession,
         chunkSize: Int64,
+        shouldCancel: (() async -> Bool)? = nil,
         onConfirmedOffset: (Int64) async throws -> Void = { _ in }
     ) async throws -> CloudFile {
         let total = source.totalSize
@@ -398,6 +419,9 @@ enum ChunkedUploadRunner {
 
         while offset < total {
             try Task.checkCancellation()
+            if await shouldCancel?() == true {
+                throw CancellationError()
+            }
 
             guard let payload = try await source.chunk(
                 at: offset,
@@ -437,6 +461,13 @@ enum ChunkedUploadRunner {
                 offset = next
                 try await onConfirmedOffset(offset)
             }
+        }
+
+        // Финальная проверка: отмена, пришедшая на последнем чанке,
+        // не должна завершать передачу «успешно».
+        try Task.checkCancellation()
+        if await shouldCancel?() == true {
+            throw CancellationError()
         }
 
         return try await session.finish()

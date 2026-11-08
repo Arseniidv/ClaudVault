@@ -15,21 +15,21 @@ import Foundation
 /// Класс thread-safe (`NSLock`): его читают и `@MainActor`
 /// менеджеры, и фоновые `ModelContext` репозиториев.
 final class CurrentUserContext: @unchecked Sendable {
-    static let shared = CurrentUserContext()
+    nonisolated static let shared = CurrentUserContext()
 
     private let lock = NSLock()
-    private var _ownerID: String?
+    nonisolated(unsafe) private var _ownerID: String?
 
     private init() {}
 
     /// Идентификатор текущего пользователя; `nil` — сеанса нет.
-    var ownerID: String? {
+    nonisolated var ownerID: String? {
         lock.lock()
         defer { lock.unlock() }
         return _ownerID
     }
 
-    func set(_ ownerID: String?) {
+    nonisolated func set(_ ownerID: String?) {
         lock.lock()
         _ownerID = ownerID
         lock.unlock()

@@ -5,6 +5,17 @@ import SwiftData
 @MainActor
 final class BackupLifecycleUseCaseTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        CurrentUserContext.shared.set("test-owner")
+    }
+
+    override func tearDown() {
+        CurrentUserContext.shared.set(nil)
+        super.tearDown()
+    }
+
+
     // MARK: - Mocks
 
     private final class MockCloudStorageRepository: CloudStorageRepository {

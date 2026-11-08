@@ -29,6 +29,10 @@ final class OneDriveTransferSession: TransferSession, @unchecked Sendable {
 
     private let maxSendAttempts = 4
 
+    /// Microsoft Graph требует, чтобы все фрагменты
+    /// upload-сессии, кроме последнего, были кратны 320 КиБ.
+    private static let fragmentQuantum = 320 * 1024
+
     private init(
         service: OneDriveService,
         sessionURL: URL,
@@ -127,8 +131,19 @@ final class OneDriveTransferSession: TransferSession, @unchecked Sendable {
             let cursor = max(confirmedOffset, payload.absoluteOffset)
             let chunkFileOffset =
                 payload.fileOffset + (cursor - payload.absoluteOffset)
-            let length = Int(end - cursor)
+            var length = Int(end - cursor)
             guard length > 0 else { break }
+
+            // Все фрагменты, кроме завершающего файл, обязаны
+            // быть кратны 320 КиБ. Если payload доходит до конца
+            // файла — остаток уходит одним последним фрагментом
+            // любого размера; иначе отправляем только выровненную
+            // часть, а хвост < кванта досылает следующий чанк
+            // движка (контракт send допускает частичное принятие).
+            if end != totalSize {
+                length -= length % Self.fragmentQuantum
+                if length == 0 { return }
+            }
 
             do {
                 let (data, response) = try await service.uploadSessionFragment(
@@ -143,8 +158,9 @@ final class OneDriveTransferSession: TransferSession, @unchecked Sendable {
 
                 // 202 Accepted — фрагмент принят, продолжать.
                 if status == 202 {
-                    confirmedOffset = end
-                    return
+                    confirmedOffset = cursor + Int64(length)
+                    if confirmedOffset >= end { return }
+                    continue
                 }
                 // 200/201 — последний фрагмент, файл создан.
                 if (200..<300).contains(status) {

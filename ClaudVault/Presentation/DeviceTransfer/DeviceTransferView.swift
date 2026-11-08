@@ -137,9 +137,12 @@ struct DeviceTransferView: View {
     @ViewBuilder
     private var generatorContent: some View {
         VStack(spacing: 20) {
-            // QR и спиннер актуальны только пока идёт создание сессии
-            // и ожидание сканирования — после получения пакета код мёртв.
-            if viewModel.phase == .working || viewModel.phase == .awaitingScan {
+            // QR и спиннер актуальны только пока идёт создание сессии,
+            // генерация кода и ожидание сканирования — после получения
+            // пакета или ошибки код мёртв.
+            if viewModel.phase == .working
+                || viewModel.phase == .generatingQRCode
+                || viewModel.phase == .awaitingScan {
                 if let qrImage = viewModel.qrImage {
                     Image(decorative: qrImage, scale: 1)
                         .interpolation(.none)
@@ -375,7 +378,7 @@ struct DeviceTransferView: View {
 
     private var isFailedPhase: Bool {
         if case .failed = viewModel.phase { return true }
-        return false
+        return viewModel.phase == .expired
     }
 
     @ViewBuilder
@@ -383,14 +386,14 @@ struct DeviceTransferView: View {
         switch viewModel.phase {
         case .idle:
             EmptyView()
-        case .working:
+        case .working, .generatingQRCode:
             HStack(spacing: 10) {
                 ProgressView().tint(.cyan)
                 Text(viewModel.statusMessage)
                     .font(.system(size: 14))
                     .foregroundStyle(.white.opacity(0.7))
             }
-        case .awaitingScan, .awaitingRestore, .completed, .failed:
+        case .awaitingScan, .awaitingRestore, .completed, .expired, .failed:
             VStack(spacing: 10) {
                 Text(viewModel.statusMessage)
                     .font(.system(size: 14))

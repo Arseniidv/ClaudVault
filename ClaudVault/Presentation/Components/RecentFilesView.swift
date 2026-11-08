@@ -60,13 +60,23 @@ struct RecentFilesView: View {
 
             if displayedRecords.isEmpty {
 
-                ContentUnavailableView(
-                    "Файлы не найдены",
-                    systemImage: "doc",
-                    description: Text(
-                        "Попробуйте изменить поисковый запрос."
+                if !searchText.isEmpty {
+                    ContentUnavailableView(
+                        "Ничего не найдено",
+                        systemImage: "magnifyingglass",
+                        description: Text(
+                            "По запросу «\(searchText)» файлов нет."
+                        )
                     )
-                )
+                } else {
+                    ContentUnavailableView(
+                        "Нет резервных копий",
+                        systemImage: "externaldrive",
+                        description: Text(
+                            "Здесь появятся ваши резервные копии."
+                        )
+                    )
+                }
 
             } else {
 
