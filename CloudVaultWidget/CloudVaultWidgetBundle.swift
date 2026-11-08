@@ -12,8 +12,10 @@ import SwiftUI
 struct CloudVaultWidgetBundle: WidgetBundle {
     var body: some Widget {
         CloudVaultWidget()
+        AudioPlayerWidget()
         #if os(iOS) && canImport(ActivityKit)
         CloudSyncLiveActivity()
+        AudioLiveActivity()
         #endif
     }
 }

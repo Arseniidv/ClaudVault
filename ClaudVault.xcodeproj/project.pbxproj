@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5EC0FFEE0000000000000001 /* ClaudVaultFinderSync.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5EC0FFEE0000000000000002 /* ClaudVaultFinderSync.appex */; platformFilters = (macos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B556ECCD309CF48D00BFC644 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B556ECCC309CF48D00BFC644 /* GoogleService-Info.plist */; };
 		B556ECCF309CF59100BFC644 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = B50A5830309CE4CE00AA12A8 /* FirebaseCore */; };
 		B556ECD0309CF59100BFC644 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = B50A5831309CE4CE00AA12A8 /* FirebaseAuth */; };
@@ -21,6 +22,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		5EC0FFEE000000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B520B17E3093D28900A2902F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5EC0FFEE0000000000000009;
+			remoteInfo = ClaudVaultFinderSync;
+		};
 		B520B1963093D28B00A2902F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = B520B17E3093D28900A2902F /* Project object */;
@@ -51,12 +59,14 @@
 			dstSubfolder = PlugIns;
 			files = (
 				B59F4985309E3125003ED35C /* CloudVaultWidgetExtension.appex in Embed Foundation Extensions */,
+				5EC0FFEE0000000000000001 /* ClaudVaultFinderSync.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		5EC0FFEE0000000000000002 /* ClaudVaultFinderSync.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ClaudVaultFinderSync.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B520B1863093D28900A2902F /* ClaudVault.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudVault.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B520B1953093D28B00A2902F /* ClaudVaultTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudVaultTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B520B19F3093D28B00A2902F /* ClaudVaultUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudVaultUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -69,6 +79,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5EC0FFEE0000000000000003 /* Exceptions for "FinderSyncExtension" folder in "ClaudVaultFinderSync" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5EC0FFEE0000000000000009 /* ClaudVaultFinderSync */;
+		};
 		B59F4989309E3125003ED35C /* Exceptions for "CloudVaultWidget" folder in "CloudVaultWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -87,6 +104,19 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		5EC0FFEE0000000000000004 /* FinderSyncExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5EC0FFEE0000000000000003 /* Exceptions for "FinderSyncExtension" folder in "ClaudVaultFinderSync" target */,
+			);
+			path = FinderSyncExtension;
+			sourceTree = "<group>";
+		};
+		5EC0FFEE0000000000000005 /* SharedFinderSync */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SharedFinderSync;
+			sourceTree = "<group>";
+		};
 		B520B1883093D28900A2902F /* ClaudVault */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -121,6 +151,11 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		5EC0FFEE0000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 		B520B1833093D28900A2902F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -164,6 +199,8 @@
 				B556ECCC309CF48D00BFC644 /* GoogleService-Info.plist */,
 				B59F4979309E3123003ED35C /* CloudVaultWidget */,
 				B5AA11CE0000000000000001 /* Shared */,
+				5EC0FFEE0000000000000004 /* FinderSyncExtension */,
+				5EC0FFEE0000000000000005 /* SharedFinderSync */,
 				B59F4974309E3123003ED35C /* Frameworks */,
 				B520B1873093D28900A2902F /* Products */,
 			);
@@ -176,6 +213,7 @@
 				B520B1953093D28B00A2902F /* ClaudVaultTests.xctest */,
 				B520B19F3093D28B00A2902F /* ClaudVaultUITests.xctest */,
 				B59F4973309E3123003ED35C /* CloudVaultWidgetExtension.appex */,
+				5EC0FFEE0000000000000002 /* ClaudVaultFinderSync.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -192,6 +230,25 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		5EC0FFEE0000000000000009 /* ClaudVaultFinderSync */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5EC0FFEE000000000000000E /* Build configuration list for PBXNativeTarget "ClaudVaultFinderSync" */;
+			buildPhases = (
+				5EC0FFEE0000000000000007 /* Sources */,
+				5EC0FFEE0000000000000006 /* Frameworks */,
+				5EC0FFEE0000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				5EC0FFEE0000000000000004 /* FinderSyncExtension */,
+				5EC0FFEE0000000000000005 /* SharedFinderSync */,
+			);
+			name = ClaudVaultFinderSync;
+			productName = ClaudVaultFinderSync;
+			productReference = 5EC0FFEE0000000000000002 /* ClaudVaultFinderSync.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		B520B1853093D28900A2902F /* ClaudVault */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B520B1A73093D28B00A2902F /* Build configuration list for PBXNativeTarget "ClaudVault" */;
@@ -205,8 +262,10 @@
 			);
 			dependencies = (
 				B59F4984309E3125003ED35C /* PBXTargetDependency */,
+				5EC0FFEE000000000000000B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
+				5EC0FFEE0000000000000005 /* SharedFinderSync */,
 				B520B1883093D28900A2902F /* ClaudVault */,
 				B5AA11CE0000000000000001 /* Shared */,
 			);
@@ -295,6 +354,9 @@
 				LastSwiftUpdateCheck = 2720;
 				LastUpgradeCheck = 2720;
 				TargetAttributes = {
+					5EC0FFEE0000000000000009 = {
+						CreatedOnToolsVersion = 27.2;
+					};
 					B520B1853093D28900A2902F = {
 						CreatedOnToolsVersion = 27.1;
 					};
@@ -335,11 +397,17 @@
 				B520B1943093D28B00A2902F /* ClaudVaultTests */,
 				B520B19E3093D28B00A2902F /* ClaudVaultUITests */,
 				B59F4972309E3123003ED35C /* CloudVaultWidgetExtension */,
+				5EC0FFEE0000000000000009 /* ClaudVaultFinderSync */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		5EC0FFEE0000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		B520B1843093D28900A2902F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -364,6 +432,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5EC0FFEE0000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		B520B1823093D28900A2902F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -387,6 +460,14 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		5EC0FFEE000000000000000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilters = (
+				macos,
+			);
+			target = 5EC0FFEE0000000000000009 /* ClaudVaultFinderSync */;
+			targetProxy = 5EC0FFEE000000000000000A /* PBXContainerItemProxy */;
+		};
 		B520B1973093D28B00A2902F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = B520B1853093D28900A2902F /* ClaudVault */;
@@ -405,6 +486,84 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		5EC0FFEE000000000000000C /* Debug configuration for PBXNativeTarget "ClaudVaultFinderSync" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FinderSyncExtension/FinderSyncExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QJZ6Q2G3QQ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FinderSyncExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CloudVault Finder";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = my.ClaudVault.FinderSync;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5EC0FFEE000000000000000D /* Release configuration for PBXNativeTarget "ClaudVaultFinderSync" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = FinderSyncExtension/FinderSyncExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = QJZ6Q2G3QQ;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = FinderSyncExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CloudVault Finder";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = my.ClaudVault.FinderSync;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		B520B1A53093D28B00A2902F /* Debug configuration for PBXProject "ClaudVault" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -831,6 +990,14 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		5EC0FFEE000000000000000E /* Build configuration list for PBXNativeTarget "ClaudVaultFinderSync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5EC0FFEE000000000000000C /* Debug configuration for PBXNativeTarget "ClaudVaultFinderSync" */,
+				5EC0FFEE000000000000000D /* Release configuration for PBXNativeTarget "ClaudVaultFinderSync" */,
+			);
+			defaultConfigurationName = Release;
+		};
 		B520B1813093D28900A2902F /* Build configuration list for PBXProject "ClaudVault" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
