@@ -199,10 +199,10 @@ final class GoogleDriveService {
 
                 let status = http.statusCode
                 if (200..<300).contains(status) {
-                    if FileManager.default.fileExists(atPath: destination.path) {
-                        try FileManager.default.removeItem(at: destination)
-                    }
-                    try FileManager.default.moveItem(at: tempURL, to: destination)
+                    // Атомарная подмена: существующий файл
+                    // назначения не удаляется до успешной
+                    // замены — см. AtomicFileMove.
+                    try AtomicFileMove.moveIntoPlace(tempURL, destination: destination)
                     return
                 }
 

@@ -607,10 +607,9 @@ final class OneDriveService {
                 }
                 let status = http.statusCode
                 if (200..<300).contains(status) {
-                    if FileManager.default.fileExists(atPath: destination.path) {
-                        try FileManager.default.removeItem(at: destination)
-                    }
-                    try FileManager.default.moveItem(at: tempURL, to: destination)
+                    // Атомарная подмена без предварительного
+                    // удаления существующего файла — AtomicFileMove.
+                    try AtomicFileMove.moveIntoPlace(tempURL, destination: destination)
                     return
                 }
 
