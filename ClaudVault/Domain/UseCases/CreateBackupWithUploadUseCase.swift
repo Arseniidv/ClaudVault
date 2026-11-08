@@ -4,6 +4,9 @@ import Foundation
 final class CreateBackupWithUploadUseCase {
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
+    /// Репозитории всех подключённых облаков — загрузка идёт
+    /// в облако, выбранное при создании бэкапа.
+    private let repositories: [StorageProviderType: CloudStorageRepository]?
     private let fileHasher: FileHashing
     private let fileAccessRepository: FileAccessRepository
     private let uploadSessionRepository: UploadSessionRepository
@@ -14,6 +17,7 @@ final class CreateBackupWithUploadUseCase {
     init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
+        repositories: [StorageProviderType: CloudStorageRepository]? = nil,
         fileHasher: FileHashing,
         fileAccessRepository: FileAccessRepository,
         uploadSessionRepository: UploadSessionRepository,
@@ -22,11 +26,22 @@ final class CreateBackupWithUploadUseCase {
     ) {
         self.backupRepository = backupRepository
         self.cloudStorageRepository = cloudStorageRepository
+        self.repositories = repositories
         self.fileHasher = fileHasher
         self.fileAccessRepository = fileAccessRepository
         self.uploadSessionRepository = uploadSessionRepository
         self.saveUploadSessionUseCase = saveUploadSessionUseCase
         self.updateUploadProgressUseCase = updateUploadProgressUseCase
+    }
+
+    /// Репозиторий облака-приёмника: выбранный провайдер,
+    /// при отсутствии — Google Drive (поведение до выбора облака).
+    private func repository(
+        for provider: StorageProviderType
+    ) -> CloudStorageRepository {
+        repositories?[provider]
+            ?? repositories?[.googleDrive]
+            ?? cloudStorageRepository
     }
 
     /// Создаёт резервную копию с загрузкой в облако.
@@ -39,6 +54,7 @@ final class CreateBackupWithUploadUseCase {
         sourceIdentifier: String,
         fileURL: URL,
         parentFolderID: String?,
+        storageProvider: StorageProviderType = .googleDrive,
         progressHandler: @escaping (Double) -> Void
     ) async throws -> BackupRecord {
 
@@ -83,7 +99,7 @@ final class CreateBackupWithUploadUseCase {
 
         // Обновляем реквизиты записи (провайдер, локальный файл).
         var updatedRecord = record
-        updatedRecord.storageProvider = .googleDrive
+        updatedRecord.storageProvider = storageProvider
         updatedRecord.localFilePath = fileURL.path
         updatedRecord.localFileBookmark = bookmarkBase64
         updatedRecord.updatedAt = Date()
@@ -118,9 +134,10 @@ final class CreateBackupWithUploadUseCase {
             }
         }
 
+        let targetRepository = repository(for: storageProvider)
         let cloudFile: CloudFile
         do {
-            cloudFile = try await cloudStorageRepository.uploadFile(
+            cloudFile = try await targetRepository.uploadFile(
                 at: fileURL,
                 parentFolderID: parentFolderID,
                 progressHandler: { fraction in

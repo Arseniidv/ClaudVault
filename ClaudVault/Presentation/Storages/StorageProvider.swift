@@ -84,13 +84,6 @@ enum StorageProviderType: String, CaseIterable, Identifiable, Codable {
     }
 
     var tint: Color {
-        switch self {
-        case .local: return .gray
-        case .oneDrive: return .blue
-        case .iCloud: return .cyan
-        case .googleDrive: return .green
-        case .dropbox: return .purple
-        case .unknown: return .secondary
-        }
+        ProviderPalette.color(for: rawValue)
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import OSLog
 
 /// Маршрут для push-навигации внутри стека «Файлы»:
 /// папка из облака, открытая из результатов поиска.
@@ -12,6 +13,11 @@ struct CloudFolderRoute: Hashable {
 /// Каждый уровень — отдельный push в NavigationStack текущей вкладки,
 /// поэтому кнопка «Назад» работает нативно.
 struct CloudFolderBrowserView: View {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "cloud-folder-browser"
+    )
     let provider: StorageProviderType
     let route: CloudFolderRoute
     let storagesViewModel: StoragesViewModel
@@ -22,6 +28,8 @@ struct CloudFolderBrowserView: View {
     @State private var previewFileURL: URL?
     @State private var isDownloadingPreview = false
     @State private var errorMessage: String?
+    /// Файл, открытый в типизированном предпросмотре по long press.
+    @State private var previewItem: FilePreviewItem?
 
     var body: some View {
         ZStack {
@@ -91,6 +99,9 @@ struct CloudFolderBrowserView: View {
                 QuickLookPreview(url: url)
             }
         }
+        .sheet(item: $previewItem) { item in
+            FilePreviewView(item: item, storagesViewModel: storagesViewModel)
+        }
         .alert(
             "Ошибка",
             isPresented: Binding(
@@ -125,6 +136,14 @@ struct CloudFolderBrowserView: View {
                     fileRowContent(file, icon: "doc.fill", tint: provider.tint)
                 }
                 .buttonStyle(.plain)
+                // Long press — типизированный предпросмотр (PDF/AV/QL).
+                // Тап сохраняет прежнее поведение (QuickLook).
+                .onLongPressGesture(minimumDuration: 0.5) {
+                    previewItem = FilePreviewItem(
+                        provider: provider,
+                        file: file
+                    )
+                }
 
                 transferMenu(for: file)
             }
@@ -147,7 +166,7 @@ struct CloudFolderBrowserView: View {
                     .lineLimit(1)
 
                 if let size = file.sizeBytes {
-                    Text(Self.byteFormatter.string(fromByteCount: size))
+                    Text(ByteFormatting.string(fromByteCount: size))
                         .font(.system(size: 11))
                         .foregroundStyle(.white.opacity(0.45))
                 }
@@ -209,15 +228,7 @@ struct CloudFolderBrowserView: View {
                 parentFolderID: route.folderID
             )
         } catch {
-            #if DEBUG
-            print(
-                "[CloudFolderBrowser] listFiles failed — "
-                    + "provider=\(provider.rawValue) "
-                    + "folderID=\(route.folderID) "
-                    + "folderName=\(route.folderName) "
-                    + "error=\(error)"
-            )
-            #endif
+            Self.logger.debug("listFiles failed")
             loadError = "\(provider.name): \(error.localizedDescription)"
         }
     }
@@ -237,10 +248,4 @@ struct CloudFolderBrowserView: View {
             errorMessage = error.localizedDescription
         }
     }
-
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 }

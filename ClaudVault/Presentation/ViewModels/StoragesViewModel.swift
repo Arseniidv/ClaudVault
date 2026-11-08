@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -11,17 +12,6 @@ final class StoragesViewModel {
     struct CloudSearchResult: Identifiable, Equatable {
         let provider: StorageProviderType
         let file: CloudFile
-
-        var id: String {
-            "\(provider.rawValue)|\(file.id)"
-        }
-    }
-
-    /// Аудиофайл, открытый в потоковом плеере.
-    struct ActiveAudioStream: Identifiable, Equatable {
-        let file: CloudFile
-        let provider: StorageProviderType
-        let stream: CloudMediaStream
 
         var id: String {
             "\(provider.rawValue)|\(file.id)"
@@ -59,10 +49,34 @@ final class StoragesViewModel {
     private let otpService: OTPService?
     /// Кэш листингов папок в SwiftData. nil — кэш отключён (превью).
     private let fileCache: CloudFileCacheRepository?
+    /// Движок chunked-передач с журналом. nil — только
+    /// legacy-пути (превью, тесты).
+    private let transferEngine: TransferEngine?
     private var states: [StorageProviderType: ProviderState] = [:]
+
+    /// Задача текущего переноса — для отмены пользователем.
+    private var transferTask: Task<Void, Never>?
+    /// Задача текущей загрузки — для отмены пользователем.
+    private var uploadTask: Task<Void, Never>?
 
     /// Провайдер, выбранный в шите «Добавить хранилище».
     var selectedProvider: StorageProviderType = .googleDrive
+
+    /// Провайдер, для которого нужно открыть шит подключения.
+    /// Запрос приходит из меню «+» на экране «Файлы» и строки
+    /// меню macOS; `StoragesView` показывает `addStorageSheet`
+    /// и сбрасывает запрос через `consumeConnectRequest`.
+    private(set) var pendingConnectProvider: StorageProviderType?
+
+    /// Запрашивает открытие шита подключения облака.
+    /// `nil` — используется текущий `selectedProvider`.
+    func requestConnect(provider: StorageProviderType? = nil) {
+        pendingConnectProvider = provider ?? selectedProvider
+    }
+
+    func consumeConnectRequest() {
+        pendingConnectProvider = nil
+    }
 
     /// Результаты глобального поиска по всем подключённым облакам.
     var cloudSearchResults: [CloudSearchResult] = []
@@ -80,9 +94,6 @@ final class StoragesViewModel {
     var transferProgress: Double = 0
     /// Имя файла, который сейчас переносится.
     var transferFileName: String?
-
-    /// Активный аудио-поток для плеера (nil — плеер закрыт).
-    var activeAudioStream: ActiveAudioStream?
 
     /// Недавно открытые облачные файлы (персистятся между запусками).
     /// Используется в разделе «Все файлы» для фильтра по провайдеру.
@@ -141,12 +152,20 @@ final class StoragesViewModel {
         repositories: [StorageProviderType: CloudStorageRepository],
         biometricAuth: BiometricAuthService? = nil,
         otpService: OTPService? = nil,
-        fileCache: CloudFileCacheRepository? = nil
+        fileCache: CloudFileCacheRepository? = nil,
+        transferEngine: TransferEngine? = nil
     ) {
         self.repositories = repositories
         self.biometricAuth = biometricAuth
         self.otpService = otpService
         self.fileCache = fileCache
+        self.transferEngine = transferEngine
+        self.transferEngine?.onProgress = { [weak self] fraction in
+            guard let self else { return }
+            Task { @MainActor in
+                self.transferProgress = fraction
+            }
+        }
         loadRecentlyOpenedFiles()
         for kind in Self.supportedProviders where repositories[kind] != nil {
             states[kind] = ProviderState()
@@ -197,16 +216,83 @@ final class StoragesViewModel {
         }
     }
 
+    /// Вызывается при смене пользователя CloudVault (вход,
+    /// выход, смена аккаунта): полностью сбрасывает in-memory
+    /// состояние провайдеров — аккаунты, файлы, навигацию,
+    /// поиск, активные передачи и «недавно открытые» — и
+    /// заново восстанавливает сессии уже в контексте нового
+    /// пользователя. Без этого экран показывал бы данные
+    /// предыдущего аккаунта.
+    func handleUserChange() async {
+        transferTask?.cancel()
+        transferTask = nil
+        uploadTask?.cancel()
+        uploadTask = nil
+
+        var freshStates: [StorageProviderType: ProviderState] = [:]
+        for kind in Self.supportedProviders where repositories[kind] != nil {
+            freshStates[kind] = ProviderState()
+        }
+        states = freshStates
+
+        cloudSearchResults = []
+        isCloudSearchRunning = false
+        isTransferRunning = false
+        transferProgress = 0
+        transferFileName = nil
+        // Смена пользователя — останавливаем плеер:
+        // очередь и источники belonged прежнему аккаунту.
+        AudioPlayerService.shared.stopAndClear()
+        otpChallengeProvider = nil
+        isOTPRequestRunning = false
+
+        // «Недавно открытые» хранят имена чужих облачных файлов —
+        // при смене пользователя список очищаем.
+        recentlyOpenedFiles = []
+        UserDefaults.standard.removeObject(
+            forKey: Self.recentlyOpenedKey
+        )
+
+        await restoreConnection()
+    }
+
     // MARK: - Connection
 
     /// Восстанавливает сессии всех провайдеров без показа UI.
     func restoreConnection() async {
-        for kind in Self.supportedProviders {
-            await restoreConnection(for: kind)
+        // Облачные сессии принадлежат пользователю CloudVault:
+        // без активного владельца (экран входа) восстанавливать
+        // нечего. Это также исключает silent OAuth-флоу GIDSignIn
+        // на экране логина — он перезаписывает общий слот
+        // continuation'а и может навсегда «подвесить»
+        // интерактивный вход через Google.
+        guard CurrentUserContext.shared.ownerID != nil else { return }
+        // Провайдеры восстанавливаем параллельно: каждый ждёт
+        // несколько сетевых RTT (restore → listFiles → usage),
+        // последовательно это утраивало задержку стартового экрана.
+        await withTaskGroup(of: Void.self) { group in
+            for kind in Self.supportedProviders {
+                group.addTask { [self] in
+                    await self.restoreConnection(for: kind)
+                }
+            }
         }
         // Публикуем итоговый снимок: если ни один аккаунт не подключён,
         // виджет получит пустой список и перестанет показывать старые данные.
         publishWidgetData()
+
+        // Подхватываем незавершённые передачи из журнала —
+        // только после восстановления сессий провайдеров,
+        // иначе запросы упадут с unauthorized.
+        if let transferEngine {
+            let repos = repositories
+            await transferEngine.resumePending { raw in
+                guard let kind = StorageProviderType(rawValue: raw) else {
+                    return nil
+                }
+                return repos[kind]
+            }
+        }
     }
 
     private func restoreConnection(for kind: StorageProviderType) async {
@@ -410,8 +496,11 @@ final class StoragesViewModel {
 
     // MARK: - Create Folder
 
-    func createFolder(named rawName: String) async {
-        let kind = selectedProvider
+    func createFolder(
+        named rawName: String,
+        in provider: StorageProviderType? = nil
+    ) async {
+        let kind = provider ?? selectedProvider
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !name.isEmpty else {
@@ -435,7 +524,23 @@ final class StoragesViewModel {
 
     // MARK: - Upload
 
+    /// MIME-тип файла по расширению (UTType → preferredMIMEType).
+    private static func mimeType(for url: URL) -> String {
+        guard let type = UTType(filenameExtension: url.pathExtension),
+              let mimeType = type.preferredMIMEType else {
+            return "application/octet-stream"
+        }
+        return mimeType
+    }
+
     func upload(fileURL: URL) async {
+        let task = Task { await self.performUpload(fileURL: fileURL) }
+        uploadTask = task
+        await task.value
+        uploadTask = nil
+    }
+
+    private func performUpload(fileURL: URL) async {
         let kind = selectedProvider
 
         // URL из fileImporter может быть security-scoped.
@@ -446,15 +551,45 @@ final class StoragesViewModel {
             }
         }
 
+        isTransferRunning = true
+        transferFileName = fileURL.lastPathComponent
+        transferProgress = 0
+        defer {
+            isTransferRunning = false
+            transferProgress = 0
+            transferFileName = nil
+        }
+
         await perform(for: kind) { [self] in
             guard let repository = repositories[kind] else { return }
             let parentID = states[kind]?.currentFolder?.id
-            let uploaded = try await repository.uploadFile(
-                at: fileURL,
-                parentFolderID: parentID,
-                progressHandler: nil
-            )
 
+            var uploaded: CloudFile?
+            // Сначала chunked-загрузка через TransferEngine:
+            // resumable-сессия + журнал + возобновление.
+            if let engine = transferEngine {
+                do {
+                    uploaded = try await engine.uploadFile(
+                        fileURL: fileURL,
+                        name: fileURL.lastPathComponent,
+                        mimeType: Self.mimeType(for: fileURL),
+                        targetProvider: kind.rawValue,
+                        target: repository,
+                        parentFolderID: parentID
+                    )
+                } catch CloudStorageError.notImplemented {
+                    uploaded = nil
+                }
+            }
+            if uploaded == nil {
+                uploaded = try await repository.uploadFile(
+                    at: fileURL,
+                    parentFolderID: parentID,
+                    progressHandler: nil
+                )
+            }
+
+            guard let uploaded else { return }
             states[kind]?.successMessage = "Файл «\(uploaded.name)» загружен."
             let files = try await repository.listFiles(parentFolderID: parentID)
             states[kind]?.files = files
@@ -465,6 +600,212 @@ final class StoragesViewModel {
     /// Пробрасывает ошибку fileImporter в состояние активного провайдера.
     func reportFilePickerError(_ error: Error) {
         states[selectedProvider]?.errorMessage = error.localizedDescription
+    }
+
+    // MARK: - Folder Upload
+
+    /// Загружает папку целиком: рекурсивно создаёт структуру
+    /// подпапок в облаке и загружает все файлы. Используется
+    /// пунктом «Загрузить папку…» меню «+».
+    func uploadFolder(fileURL: URL) async {
+        let task = Task { await self.performUploadFolder(fileURL: fileURL) }
+        uploadTask = task
+        await task.value
+        uploadTask = nil
+    }
+
+    private func performUploadFolder(fileURL: URL) async {
+        let kind = selectedProvider
+
+        let hasAccess = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if hasAccess {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        isTransferRunning = true
+        transferFileName = fileURL.lastPathComponent
+        transferProgress = 0
+        defer {
+            isTransferRunning = false
+            transferProgress = 0
+            transferFileName = nil
+        }
+
+        await perform(for: kind) { [self] in
+            guard let repository = repositories[kind] else { return }
+
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(
+                atPath: fileURL.path,
+                isDirectory: &isDirectory
+            ), isDirectory.boolValue else {
+                throw CloudStorageError.operationFailed("Выбрана не папка.")
+            }
+
+            // Собираем все файлы и подпапки рекурсивно.
+            guard let enumerator = FileManager.default.enumerator(
+                at: fileURL,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            ) else { return }
+
+            var directories: [URL] = []
+            var files: [URL] = []
+            while let url = enumerator.nextObject() as? URL {
+                let isDir = (try? url.resourceValues(
+                    forKeys: [.isDirectoryKey]
+                ))?.isDirectory ?? false
+                if isDir {
+                    directories.append(url)
+                } else {
+                    files.append(url)
+                }
+            }
+
+            // Родительские папки создаём раньше дочерних.
+            directories.sort { $0.path.count < $1.path.count }
+
+            // Карта «локальный путь папки → id облачной папки».
+            // Пустая строка означает «корень» — текущая папка
+            // навигации провайдера.
+            var folderIDs: [String: String] = [
+                fileURL.standardizedFileURL.path: ""
+            ]
+            // Листинги родителей кешируем: все подпапки одного
+            // родителя переиспользуют один listFiles вместо N+1.
+            var siblingCache: [String: [CloudFile]] = [:]
+
+            for dir in directories {
+                try Task.checkCancellation()
+                try await ensureCloudFolder(
+                    for: dir,
+                    kind: kind,
+                    repository: repository,
+                    folderIDs: &folderIDs,
+                    siblingCache: &siblingCache
+                )
+            }
+
+            var uploadedCount = 0
+            for (index, file) in files.enumerated() {
+                try Task.checkCancellation()
+                transferFileName = file.lastPathComponent
+                transferProgress = files.isEmpty
+                    ? 0
+                    : Double(index) / Double(files.count)
+
+                let parentID = cloudParentID(
+                    for: file,
+                    kind: kind,
+                    folderIDs: folderIDs
+                )
+                let name = file.lastPathComponent
+                let mimeType = Self.mimeType(for: file)
+
+                var uploaded = false
+                if let engine = transferEngine {
+                    do {
+                        _ = try await engine.uploadFile(
+                            fileURL: file,
+                            name: name,
+                            mimeType: mimeType,
+                            targetProvider: kind.rawValue,
+                            target: repository,
+                            parentFolderID: parentID
+                        )
+                        uploaded = true
+                    } catch CloudStorageError.notImplemented {
+                        uploaded = false
+                    }
+                }
+                if !uploaded {
+                    _ = try await repository.uploadFile(
+                        at: file,
+                        parentFolderID: parentID,
+                        progressHandler: nil
+                    )
+                }
+                uploadedCount += 1
+            }
+            transferProgress = 1
+
+            states[kind]?.successMessage = uploadedCount == 1
+                ? "Папка «\(fileURL.lastPathComponent)» загружена (1 файл)."
+                : "Папка «\(fileURL.lastPathComponent)» загружена (\(uploadedCount) файлов)."
+
+            let parentID = states[kind]?.currentFolder?.id
+            if let files = try? await repository.listFiles(
+                parentFolderID: parentID
+            ) {
+                states[kind]?.files = files
+                saveCachedFiles(files, for: kind, parentFolderID: parentID)
+            }
+            await loadStorageUsage(for: kind)
+        }
+    }
+
+    /// Id облачной папки-родителя для локального URL
+    /// внутри загружаемой папки. Пустая строка в карте —
+    /// корень: текущая папка навигации провайдера.
+    private func cloudParentID(
+        for localURL: URL,
+        kind: StorageProviderType,
+        folderIDs: [String: String]
+    ) -> String? {
+        let key = localURL.deletingLastPathComponent()
+            .standardizedFileURL.path
+        guard let raw = folderIDs[key] else { return nil }
+        return raw.isEmpty ? states[kind]?.currentFolder?.id : raw
+    }
+
+    /// Создаёт облачную папку для локальной директории
+    /// (или находит существующую с тем же именем).
+    private func ensureCloudFolder(
+        for dir: URL,
+        kind: StorageProviderType,
+        repository: any CloudStorageRepository,
+        folderIDs: inout [String: String],
+        siblingCache: inout [String: [CloudFile]]
+    ) async throws {
+        let key = dir.standardizedFileURL.path
+        guard folderIDs[key] == nil else { return }
+        guard let parentID = cloudParentID(
+            for: dir,
+            kind: kind,
+            folderIDs: folderIDs
+        ) else { return }
+
+        let name = dir.lastPathComponent
+        // Переиспользуем существующую папку с таким именем,
+        // чтобы повторная загрузка не плодила дубликаты.
+        // Листинг родителя кешируется на время загрузки папки —
+        // иначе каждая подпапка делала бы свой listFiles.
+        let cacheKey = parentID
+        let siblings: [CloudFile]?
+        if let cached = siblingCache[cacheKey] {
+            siblings = cached
+        } else {
+            siblings = try? await repository.listFiles(
+                parentFolderID: parentID
+            )
+            if let siblings {
+                siblingCache[cacheKey] = siblings
+            }
+        }
+        var folderID = siblings?.first {
+            $0.isFolder
+                && $0.name.caseInsensitiveCompare(name)
+                    == .orderedSame
+        }?.id
+        if folderID == nil {
+            folderID = try await repository.createFolder(
+                name: name,
+                parentFolderID: parentID
+            ).id
+        }
+        folderIDs[key] = folderID ?? ""
     }
 
     // MARK: - Global Search
@@ -669,7 +1010,11 @@ final class StoragesViewModel {
         let cacheURL = CloudThumbnailCache.shared.fileURL(forKey: cacheKey)
 
         var file = file
-        file.thumbnailPath = cacheURL.path
+        // thumbnailPath имеет смысл только если превью уже
+        // лежит в кэше — иначе указывает на несуществующий файл.
+        if FileManager.default.fileExists(atPath: cacheURL.path) {
+            file.thumbnailPath = cacheURL.path
+        }
         let fileForLoad = file
 
         return CloudThumbnailProvider(cacheKey: cacheKey) {
@@ -726,6 +1071,21 @@ final class StoragesViewModel {
         return fileURL
     }
 
+    /// Потоковый дескриптор медиафайла для встроенного
+    /// аудио/видео-предпросмотра. Бросает
+    /// `CloudStorageError.notImplemented`, если провайдер не умеет
+    /// отдавать прямые ссылки — тогда файл скачивается через
+    /// `downloadForPreview` и играется локально.
+    func mediaStream(
+        for file: CloudFile,
+        provider: StorageProviderType
+    ) async throws -> CloudMediaStream {
+        guard let repository = repositories[provider] else {
+            throw CloudStorageError.notConnected
+        }
+        return try await repository.streamDescriptor(for: file)
+    }
+
     /// Аудиофайл по mimeType или расширению.
     func isAudioFile(_ file: CloudFile) -> Bool {
         if file.mimeType.hasPrefix("audio/") { return true }
@@ -735,24 +1095,63 @@ final class StoragesViewModel {
             .contains(ext)
     }
 
-    /// Открывает аудиофайл в потоковом плеере (без скачивания).
+    /// Максимальный размер очереди воспроизведения из папки —
+    /// защита от случайного запуска тысяч треков.
+    private static let maxAudioQueueSize = 300
+
+    /// Строит очередь аудиотреков вокруг выбранного файла:
+    /// все аудиофайлы текущей открытой папки провайдера,
+    /// воспроизведение начинается с `file`.
+    /// Если папку перечислить не удалось (файл из поиска,
+    /// устаревший id) — очередь состоит из одного трека.
+    func audioQueue(
+        around file: CloudFile,
+        provider kind: StorageProviderType
+    ) async -> (tracks: [AudioTrack], index: Int) {
+        let parentID = states[kind]?.currentFolder?.id
+        let siblings = (try? await listCloudFiles(
+            provider: kind,
+            parentFolderID: parentID
+        )) ?? []
+
+        let audioFiles = siblings
+            .filter { isAudioFile($0) }
+            .prefix(Self.maxAudioQueueSize)
+
+        var tracks = audioFiles.map {
+            AudioTrack(file: $0, provider: kind)
+        }
+
+        let targetID = "\(kind.rawValue)|\(file.id)"
+        let index = tracks.firstIndex { $0.id == targetID } ?? 0
+
+        // Файл не найден среди соседей — играем его одного.
+        if index == 0, !tracks.contains(where: { $0.id == targetID }) {
+            tracks = [AudioTrack(file: file, provider: kind)]
+        }
+
+        return (tracks, min(index, max(tracks.count - 1, 0)))
+    }
+
+    /// Запускает аудиофайл в едином плеере приложения.
+    /// Очередь — все аудиофайлы текущей папки, начиная
+    /// с выбранного; источник каждого трека резолвится
+    /// лениво (кэш → стриминг → скачивание) в момент
+    /// воспроизведения, поэтому временные ссылки
+    /// не хранятся в очереди.
     func playAudio(_ file: CloudFile) async {
         let kind = selectedProvider
-        guard let repository = repositories[kind] else { return }
+        markFileOpened(file, provider: kind)
 
-        do {
-            let stream = try await repository.streamDescriptor(for: file)
-            activeAudioStream = ActiveAudioStream(
-                file: file,
-                provider: kind,
-                stream: stream
-            )
-            markFileOpened(file, provider: kind)
-        } catch let error as CloudStorageError {
-            states[kind]?.errorMessage = error.localizedDescription
-        } catch {
-            states[kind]?.errorMessage = error.localizedDescription
+        let queue = await audioQueue(around: file, provider: kind)
+        guard !queue.tracks.isEmpty else {
+            states[kind]?.errorMessage = "Не удалось подготовить аудиофайл"
+            return
         }
+        AudioPlayerService.shared.play(
+            queue: queue.tracks,
+            startIndex: queue.index
+        )
     }
 
     // MARK: - Cloud-to-Cloud Transfer
@@ -762,6 +1161,34 @@ final class StoragesViewModel {
     /// Цель — текущая открытая папка целевого провайдера
     /// (или корень, если там ничего не открыто).
     func transferItem(
+        _ file: CloudFile,
+        from source: StorageProviderType,
+        to target: StorageProviderType,
+        move: Bool
+    ) async {
+        let task = Task {
+            await self.performTransferItem(
+                file,
+                from: source,
+                to: target,
+                move: move
+            )
+        }
+        transferTask = task
+        await task.value
+        transferTask = nil
+    }
+
+    /// Отменяет текущий перенос/загрузку: задача останавливается
+    /// через `Task.checkCancellation` в цикле движка, запись
+    /// журнала помечается `.cancelled`.
+    func cancelTransfer() {
+        transferTask?.cancel()
+        uploadTask?.cancel()
+        Task { await transferEngine?.cancelActive() }
+    }
+
+    private func performTransferItem(
         _ file: CloudFile,
         from source: StorageProviderType,
         to target: StorageProviderType,
@@ -848,24 +1275,29 @@ final class StoragesViewModel {
             return
         }
 
-        // Файл: сначала пробуем chunked-трансфер «на лету»
-        // (источник → Range-запросы → цель чанками, без файла на диске).
-        // Если провайдер не поддерживает — fallback на temp-файл.
+        // Файл: основной путь — TransferEngine (Range-скачивание
+        // в temp-файлы → resumable-сессия приёмника → журнал,
+        // верификация размера и безопасный move). Если провайдер
+        // не поддерживает сессии — legacy-путь через temp-файл.
         transferFileName = file.name
         transferProgress = 0
 
-        if let sizeBytes = file.sizeBytes, sizeBytes >= 0,
-           (try? await transferFileStreamed(
-               file,
-               sourceRepo: sourceRepo,
-               targetRepo: targetRepo,
-               targetParentID: targetParentID,
-               sizeBytes: sizeBytes
-           )) == true {
-            if move {
-                try await sourceRepo.deleteFile(id: file.id)
+        if let engine = transferEngine {
+            do {
+                _ = try await engine.transferFile(
+                    file,
+                    from: source.rawValue,
+                    source: sourceRepo,
+                    to: target.rawValue,
+                    target: targetRepo,
+                    targetParentID: targetParentID,
+                    move: move
+                )
+                return
+            } catch CloudStorageError.notImplemented {
+                // Нет makeChunkSource/makeUploadSession —
+                // переходим на fallback ниже.
             }
-            return
         }
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -876,12 +1308,16 @@ final class StoragesViewModel {
         )
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let localURL = tempDir.appendingPathComponent(file.name)
+        let safeName = SafeFileName.sanitized(
+            file.name,
+            fallback: "download-\(UUID().uuidString)"
+        )
+        let localURL = tempDir.appendingPathComponent(safeName)
 
         try await sourceRepo.downloadFile(id: file.id, to: localURL, progressHandler: nil)
         transferProgress = 0
 
-        _ = try await targetRepo.uploadFile(
+        let uploaded = try await targetRepo.uploadFile(
             at: localURL,
             parentFolderID: targetParentID
         ) { [weak self] fraction in
@@ -892,49 +1328,15 @@ final class StoragesViewModel {
         }
 
         if move {
+            // Источник удаляем только после проверки размера
+            // у приёмника.
+            let meta = try await targetRepo.fileMetadata(id: uploaded.id)
+            guard meta.sizeBytes == file.sizeBytes else {
+                throw CloudStorageError.operationFailed(
+                    "Размер загруженного файла не совпадает с источником."
+                )
+            }
             try await sourceRepo.deleteFile(id: file.id)
-        }
-    }
-
-    /// Chunked-трансфер файла без записи на диск.
-    /// Возвращает false, если провайдеры не поддерживают стриминг
-    /// (тогда вызывающий код использует путь через temp-файл).
-    private func transferFileStreamed(
-        _ file: CloudFile,
-        sourceRepo: CloudStorageRepository,
-        targetRepo: CloudStorageRepository,
-        targetParentID: String?,
-        sizeBytes: Int64
-    ) async throws -> Bool {
-        do {
-            let descriptor = try await sourceRepo.streamDescriptor(for: file)
-            let reader = HTTPChunkReader(
-                url: descriptor.url,
-                headers: descriptor.headers,
-                totalSize: sizeBytes
-            )
-
-            _ = try await targetRepo.uploadStreamedFile(
-                name: file.name,
-                mimeType: file.mimeType,
-                parentFolderID: targetParentID,
-                sizeBytes: sizeBytes,
-                readChunk: { try await reader.nextChunk() },
-                progressHandler: { [weak self] fraction in
-                    guard let self else { return }
-                    Task { @MainActor in
-                        self.transferProgress = fraction
-                    }
-                }
-            )
-            return true
-        } catch CloudStorageError.notImplemented {
-            return false
-        } catch {
-            // Ошибка внутри стриминга — пробрасываем как обычную ошибку
-            // переноса, а не молча откатываемся (файл может быть
-            // частично загружен).
-            throw error
         }
     }
 

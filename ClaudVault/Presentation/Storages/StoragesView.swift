@@ -9,6 +9,8 @@ struct StoragesView: View {
     @State private var showingCreateFolder = false
     @State private var newFolderName = ""
     @State private var pendingTransferFile: CloudFile?
+    /// Файл, открытый в типизированном предпросмотре по long press.
+    @State private var previewItem: FilePreviewItem?
 
     private var providers: [StorageProvider] {
         viewModel.connectedStorageProviders
@@ -42,6 +44,21 @@ struct StoragesView: View {
         #endif
         .sheet(isPresented: $showingAddStorage) {
             addStorageSheet
+        }
+        // Запрос «Добавить облако» из меню «+» экрана «Файлы»:
+        // открываем шит подключения с уже выбранным провайдером.
+        .onChange(of: viewModel.pendingConnectProvider) { _, provider in
+            guard let provider else { return }
+            viewModel.selectedProvider = provider
+            showingAddStorage = true
+            viewModel.consumeConnectRequest()
+        }
+        .task {
+            if let provider = viewModel.pendingConnectProvider {
+                viewModel.selectedProvider = provider
+                showingAddStorage = true
+                viewModel.consumeConnectRequest()
+            }
         }
         .sheet(isPresented: Binding(
             get: { viewModel.otpChallengeProvider != nil },
@@ -374,15 +391,8 @@ struct StoragesView: View {
             } message: {
                 Text("Файл будет скопирован или перемещён в текущую папку выбранного хранилища.")
             }
-            .sheet(item: Binding(
-                get: { viewModel.activeAudioStream },
-                set: { viewModel.activeAudioStream = $0 }
-            )) { active in
-                AudioPlayerView(
-                    file: active.file,
-                    providerName: active.provider.name,
-                    stream: active.stream
-                )
+            .sheet(item: $previewItem) { item in
+                FilePreviewView(item: item, storagesViewModel: viewModel)
             }
         }
     }
@@ -574,7 +584,7 @@ struct StoragesView: View {
                 HStack(spacing: 10) {
                     ProgressView()
                         .tint(.cyan)
-                    Text("Перенос: \(viewModel.transferFileName ?? "")")
+                    Text("Передача: \(viewModel.transferFileName ?? "")")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -582,6 +592,15 @@ struct StoragesView: View {
                     Text("\(Int(viewModel.transferProgress * 100))%")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.cyan)
+                    Button("Отмена") {
+                        viewModel.cancelTransfer()
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.15))
+                    .clipShape(Capsule())
                 }
                 .padding(12)
                 .background(Color.cyan.opacity(0.1))
@@ -643,7 +662,7 @@ struct StoragesView: View {
 
                         Text(file.isFolder
                              ? "Папка"
-                             : (file.sizeBytes.map { Self.byteFormatter.string(fromByteCount: $0) } ?? "—"))
+                             : (file.sizeBytes.map { ByteFormatting.string(fromByteCount: $0) } ?? "—"))
                             .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(0.5))
                     }
@@ -697,6 +716,17 @@ struct StoragesView: View {
                 .disabled(viewModel.activeIsBusy || viewModel.isTransferRunning)
             }
         }
+        // Long press на строке — типизированный предпросмотр файла.
+        // Тап сохраняет прежнее поведение (папка/свойства), жест
+        // не мешает кнопкам play/transfer и не вызывает удаление.
+        .onLongPressGesture(minimumDuration: 0.5) {
+            if !file.isFolder {
+                previewItem = FilePreviewItem(
+                    provider: viewModel.selectedProvider,
+                    file: file
+                )
+            }
+        }
     }
 
     private func messageRow(text: String, color: Color) -> some View {
@@ -717,7 +747,7 @@ struct StoragesView: View {
 
         if let size = file.sizeBytes {
             lines.append(
-                "Размер: \(Self.byteFormatter.string(fromByteCount: size))"
+                "Размер: \(ByteFormatting.string(fromByteCount: size))"
             )
         }
 
@@ -735,12 +765,6 @@ struct StoragesView: View {
 
         return lines.joined(separator: "\n")
     }
-
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 
     // MARK: - Footer
 

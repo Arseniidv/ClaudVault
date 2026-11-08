@@ -17,6 +17,12 @@ protocol CloudStorageRepository {
     ) async throws -> CloudFile
     func deleteFile(id: String) async throws
 
+    /// Переименовывает файл/папку без перезагрузки содержимого
+    /// и возвращает обновлённые метаданные. У Dropbox `id`
+    /// является путём — после переименования он меняется,
+    /// вызывающий код должен обновить `cloudObjectID` у версий.
+    func renameFile(id: String, name: String) async throws -> CloudFile
+
     /// Скачивает файл по `id` в локальный `destination`.
     /// Для папок не поддерживается — используется при переносе
     /// файлов между облаками.
@@ -48,6 +54,24 @@ protocol CloudStorageRepository {
         readChunk: () async throws -> Data?,
         progressHandler: (@Sendable (Double) -> Void)?
     ) async throws -> CloudFile
+
+    /// Создаёт (или восстанавливает по `resumeState`) сессию
+    /// chunked-загрузки у провайдера. Возвращает сессию и её
+    /// сериализуемое состояние для журнала передач (без токенов).
+    /// `nil` — провайдер не поддерживает сессии или `resumeState`
+    /// протух: вызывающий код должен повторить с `resumeState: nil`.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)?
+
+    /// Возвращает потоковый источник байтов файла (Range-запросы
+    /// с обновлением авторизации) для cloud-to-cloud передачи
+    /// без промежуточного файла на диске. `nil` — не поддерживается.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)?
 
     /// Поиск файлов по имени по всему хранилищу.
     func searchFiles(query: String) async throws -> [CloudFile]
@@ -87,13 +111,22 @@ extension CloudStorageRepository {
         mimeType: String,
         into directory: URL
     ) async throws -> URL {
-        let destination = directory.appendingPathComponent(name)
+        // Имя приходит из облачных метаданных — перед записью
+        // на диск санитизируем, чтобы ".."/разделители не вывели
+        // файл за пределы целевой директории.
+        let safeName = SafeFileName.sanitized(name, fallback: "download")
+        let destination = directory.appendingPathComponent(safeName)
         try await downloadFile(
             id: id,
             to: destination,
             progressHandler: nil
         )
         return destination
+    }
+
+    /// Провайдеры без переименования.
+    func renameFile(id: String, name: String) async throws -> CloudFile {
+        throw CloudStorageError.notImplemented
     }
 
     /// Провайдеры без миниатюр возвращают nil.
@@ -106,6 +139,22 @@ extension CloudStorageRepository {
         for file: CloudFile
     ) async throws -> CloudMediaStream {
         throw CloudStorageError.notImplemented
+    }
+
+    /// Провайдеры без chunked-загрузки через TransferSession.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        nil
+    }
+
+    /// Провайдеры без потокового источника Range-скачивания.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)? {
+        nil
     }
 
     /// Провайдеры без chunked-загрузки — вызывающий код

@@ -4,6 +4,9 @@ import Foundation
 final class ReparseAndBackupUseCase {
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
+    /// Репозитории всех облаков — новая версия грузится
+    /// в облако, где лежит запись (`record.storageProvider`).
+    private let repositories: [StorageProviderType: CloudStorageRepository]?
     private let fileHasher: FileHashing
     private let fileAccessRepository: FileAccessRepository
     private let uploadSessionRepository: UploadSessionRepository
@@ -13,6 +16,7 @@ final class ReparseAndBackupUseCase {
     init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
+        repositories: [StorageProviderType: CloudStorageRepository]? = nil,
         fileHasher: FileHashing,
         fileAccessRepository: FileAccessRepository,
         uploadSessionRepository: UploadSessionRepository,
@@ -21,11 +25,22 @@ final class ReparseAndBackupUseCase {
     ) {
         self.backupRepository = backupRepository
         self.cloudStorageRepository = cloudStorageRepository
+        self.repositories = repositories
         self.fileHasher = fileHasher
         self.fileAccessRepository = fileAccessRepository
         self.uploadSessionRepository = uploadSessionRepository
         self.saveUploadSessionUseCase = saveUploadSessionUseCase
         self.updateUploadProgressUseCase = updateUploadProgressUseCase
+    }
+
+    /// Репозиторий облака записи: `record.storageProvider`,
+    /// при отсутствии — Google Drive (совместимость со старыми записями).
+    private func repository(
+        for record: BackupRecord
+    ) -> CloudStorageRepository {
+        repositories?[record.storageProvider]
+            ?? repositories?[.googleDrive]
+            ?? cloudStorageRepository
     }
 
     /// Повторный анализ записи резервной копии.
@@ -158,7 +173,7 @@ final class ReparseAndBackupUseCase {
 
         let cloudFile: CloudFile
         do {
-            cloudFile = try await cloudStorageRepository.uploadFile(
+            cloudFile = try await repository(for: record).uploadFile(
                 at: fileURL,
                 parentFolderID: parentFolderID,
                 progressHandler: { fraction in
