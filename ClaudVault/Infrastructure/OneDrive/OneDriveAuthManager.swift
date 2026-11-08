@@ -34,7 +34,7 @@ final class OneDriveAuthManager {
     /// Redirect URI вида `msauth.<bundleID>://auth` — должен совпадать
     /// с URI, зарегистрированным в Azure Portal.
     static var redirectURI: String {
-        "msauth.\(AppConfiguration.bunfleIdentificator)://auth"
+        "msauth.\(AppConfiguration.bundleIdentifier)://auth"
     }
 
     private static var redirectScheme: String {
@@ -101,9 +101,20 @@ final class OneDriveAuthManager {
         }
     }
 
+    /// Текущий пользователь CloudVault; nil — сеанса нет.
+    private var currentOwnerID: String? {
+        CurrentUserContext.shared.ownerID
+    }
+
     func signOut() {
         tokenStore.delete()
-        Task { try? await keychainStorage.deleteSessions(for: .oneDrive) }
+        guard let ownerID = currentOwnerID else { return }
+        Task {
+            try? await keychainStorage.deleteSessions(
+                for: .oneDrive,
+                ownerID: ownerID
+            )
+        }
     }
 
     /// Свежий access token: из Keychain, если не истёк,
@@ -311,7 +322,12 @@ final class OneDriveAuthManager {
 
     private func handleInvalidGrant(message: String) async throws -> OneDriveTokenStore.StoredTokens {
         tokenStore.delete()
-        try? await keychainStorage.deleteSessions(for: .oneDrive)
+        if let ownerID = currentOwnerID {
+            try? await keychainStorage.deleteSessions(
+                for: .oneDrive,
+                ownerID: ownerID
+            )
+        }
         throw CloudStorageError.unauthorized
     }
 
@@ -320,13 +336,15 @@ final class OneDriveAuthManager {
     /// Дублирует активную OneDrive-сессию в нормализованную
     /// `CloudAccountSession`-запись единого Keychain-хранилища.
     private func persistSession(account: CloudStorageAccount) async {
-        guard let tokens = tokenStore.load() else { return }
+        guard let tokens = tokenStore.load(),
+              let ownerID = currentOwnerID else { return }
         await saveSessionMirror(CloudAccountSession(
             provider: .oneDrive,
             userEmail: account.email,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
-            expiresAt: tokens.expiresAt
+            expiresAt: tokens.expiresAt,
+            ownerID: ownerID
         ))
     }
 
@@ -335,14 +353,16 @@ final class OneDriveAuthManager {
     private func mirrorTokenRefresh(
         _ tokens: OneDriveTokenStore.StoredTokens
     ) async {
-        let sessions = await keychainStorage.listAllSessions()
+        guard let ownerID = currentOwnerID else { return }
+        let sessions = await keychainStorage.listAllSessions(ownerID: ownerID)
         for session in sessions where session.provider == .oneDrive {
             await saveSessionMirror(CloudAccountSession(
                 provider: .oneDrive,
                 userEmail: session.userEmail,
                 accessToken: tokens.accessToken,
                 refreshToken: tokens.refreshToken,
-                expiresAt: tokens.expiresAt
+                expiresAt: tokens.expiresAt,
+                ownerID: ownerID
             ))
         }
     }

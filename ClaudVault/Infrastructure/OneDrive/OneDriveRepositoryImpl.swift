@@ -64,6 +64,10 @@ final class OneDriveRepositoryImpl: CloudStorageRepository {
         try await service.deleteFile(id: id)
     }
 
+    func renameFile(id: String, name: String) async throws -> CloudFile {
+        try await service.renameFile(id: id, name: name)
+    }
+
     func downloadFile(
         id: String,
         to destination: URL,

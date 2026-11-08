@@ -94,6 +94,10 @@ final class GoogleDriveRepositoryImpl: CloudStorageRepository {
         )
     }
 
+    func renameFile(id: String, name: String) async throws -> CloudFile {
+        try await driveService.renameFile(id: id, name: name)
+    }
+
     func deleteFile(id: String) async throws {
         try await driveService.deleteFile(id: id)
     }
@@ -115,15 +119,22 @@ final class GoogleDriveRepositoryImpl: CloudStorageRepository {
         mimeType: String,
         into directory: URL
     ) async throws -> URL {
+        // Имя приходит из облачных метаданных — санитизируем
+        // перед записью на диск (защита от ".."/разделителей).
+        guard let safeName = SafeFileName.sanitized(name) else {
+            throw CloudStorageError.operationFailed(
+                "Некорректное имя файла в облаке."
+            )
+        }
         guard let export = Self.workspaceExport(for: mimeType) else {
-            let destination = directory.appendingPathComponent(name)
+            let destination = directory.appendingPathComponent(safeName)
             try await driveService.downloadFile(id: id, to: destination)
             return destination
         }
 
-        let baseName = (name as NSString).deletingPathExtension
+        let baseName = (safeName as NSString).deletingPathExtension
         let destination = directory
-            .appendingPathComponent(baseName.isEmpty ? name : baseName)
+            .appendingPathComponent(baseName.isEmpty ? safeName : baseName)
             .appendingPathExtension(export.fileExtension)
         try await driveService.exportFile(
             id: id,
@@ -259,6 +270,8 @@ final class GoogleDriveRepositoryImpl: CloudStorageRepository {
             return .permissionDenied
         case .tokenExchangeFailed:
             return .unauthorized
+        case .cancelled:
+            return .cancelled
         case .missingAccount:
             return .operationFailed(
                 "Не удалось получить данные Google-аккаунта."

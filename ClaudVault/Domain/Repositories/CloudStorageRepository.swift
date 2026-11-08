@@ -17,6 +17,12 @@ protocol CloudStorageRepository {
     ) async throws -> CloudFile
     func deleteFile(id: String) async throws
 
+    /// Переименовывает файл/папку без перезагрузки содержимого
+    /// и возвращает обновлённые метаданные. У Dropbox `id`
+    /// является путём — после переименования он меняется,
+    /// вызывающий код должен обновить `cloudObjectID` у версий.
+    func renameFile(id: String, name: String) async throws -> CloudFile
+
     /// Скачивает файл по `id` в локальный `destination`.
     /// Для папок не поддерживается — используется при переносе
     /// файлов между облаками.
@@ -105,13 +111,22 @@ extension CloudStorageRepository {
         mimeType: String,
         into directory: URL
     ) async throws -> URL {
-        let destination = directory.appendingPathComponent(name)
+        // Имя приходит из облачных метаданных — перед записью
+        // на диск санитизируем, чтобы ".."/разделители не вывели
+        // файл за пределы целевой директории.
+        let safeName = SafeFileName.sanitized(name, fallback: "download")
+        let destination = directory.appendingPathComponent(safeName)
         try await downloadFile(
             id: id,
             to: destination,
             progressHandler: nil
         )
         return destination
+    }
+
+    /// Провайдеры без переименования.
+    func renameFile(id: String, name: String) async throws -> CloudFile {
+        throw CloudStorageError.notImplemented
     }
 
     /// Провайдеры без миниатюр возвращают nil.

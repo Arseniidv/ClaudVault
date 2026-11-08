@@ -28,6 +28,8 @@ struct CloudFolderBrowserView: View {
     @State private var previewFileURL: URL?
     @State private var isDownloadingPreview = false
     @State private var errorMessage: String?
+    /// Файл, открытый в типизированном предпросмотре по long press.
+    @State private var previewItem: FilePreviewItem?
 
     var body: some View {
         ZStack {
@@ -97,6 +99,9 @@ struct CloudFolderBrowserView: View {
                 QuickLookPreview(url: url)
             }
         }
+        .sheet(item: $previewItem) { item in
+            FilePreviewView(item: item, storagesViewModel: storagesViewModel)
+        }
         .alert(
             "Ошибка",
             isPresented: Binding(
@@ -131,6 +136,14 @@ struct CloudFolderBrowserView: View {
                     fileRowContent(file, icon: "doc.fill", tint: provider.tint)
                 }
                 .buttonStyle(.plain)
+                // Long press — типизированный предпросмотр (PDF/AV/QL).
+                // Тап сохраняет прежнее поведение (QuickLook).
+                .onLongPressGesture(minimumDuration: 0.5) {
+                    previewItem = FilePreviewItem(
+                        provider: provider,
+                        file: file
+                    )
+                }
 
                 transferMenu(for: file)
             }
@@ -153,7 +166,7 @@ struct CloudFolderBrowserView: View {
                     .lineLimit(1)
 
                 if let size = file.sizeBytes {
-                    Text(Self.byteFormatter.string(fromByteCount: size))
+                    Text(ByteFormatting.string(fromByteCount: size))
                         .font(.system(size: 11))
                         .foregroundStyle(.white.opacity(0.45))
                 }
@@ -235,10 +248,4 @@ struct CloudFolderBrowserView: View {
             errorMessage = error.localizedDescription
         }
     }
-
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 }
