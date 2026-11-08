@@ -28,6 +28,11 @@ final class CreateBackupViewModel {
     private(set) var fileSize: Int64?
     private(set) var checksum: String?
 
+    /// Имя, которое пользователь хочет дать копии. Изначально
+    /// совпадает с именем выбранного файла, но может быть
+    /// изменено в UI (актуально для сканов `scan_<UUID>.pdf`).
+    var editableFileName = ""
+
     // MARK: - Initialization
 
     init(
@@ -83,6 +88,7 @@ final class CreateBackupViewModel {
             selectedFileURL = url
             checksum = result.0
             fileSize = result.1
+            editableFileName = Self.defaultFileName(for: url)
 
         } catch {
             errorMessage = error.localizedDescription
@@ -96,8 +102,10 @@ final class CreateBackupViewModel {
     /// в `uploadProgress` (0...1).
     func createBackup() async {
         guard let sourceURL = selectedFileURL,
-              let selectedFileName else {
-            errorMessage = "Сначала выберите файл."
+              let resolvedName = resolvedFileName() else {
+            errorMessage = selectedFileURL == nil
+                ? "Сначала выберите файл."
+                : "Введите имя файла."
             return
         }
 
@@ -112,7 +120,7 @@ final class CreateBackupViewModel {
 
         do {
             _ = try await createBackupWithUpload.execute(
-                fileName: selectedFileName,
+                fileName: resolvedName,
                 sourceIdentifier: sourceURL.path,
                 fileURL: sourceURL,
                 parentFolderID: nil,
@@ -136,8 +144,44 @@ final class CreateBackupViewModel {
         selectedFileURL = nil
         fileSize = nil
         checksum = nil
+        editableFileName = ""
         errorMessage = nil
         isCompleted = false
         uploadProgress = 0
+    }
+
+    /// Имя по умолчанию для поля редактирования. PDF из сканера
+    /// называется `scan_<UUID>.pdf` — подставляем читаемое
+    /// «Скан <дата>.pdf», остальным файлам оставляем исходное имя.
+    private static func defaultFileName(for url: URL) -> String {
+        let name = url.lastPathComponent
+        if name.hasPrefix("scan_"),
+           url.pathExtension.lowercased() == "pdf" {
+            let stamp = Date.now.formatted(date: .numeric, time: .omitted)
+            return "Скан \(stamp).pdf"
+        }
+        return name
+    }
+
+    /// Имя файла для копии: введённое пользователем значение,
+    /// очищенное от пробелов и недопустимых для путей символов.
+    /// Если расширение не указано — подставляется расширение
+    /// исходного файла (например, `.pdf` для скана).
+    private func resolvedFileName() -> String? {
+        var name = editableFileName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+
+        guard !name.isEmpty else { return nil }
+
+        // Расширение добавляем, только если пользователь не ввёл
+        // его сам (точка в имени считается явным расширением).
+        if !name.contains("."),
+           let ext = selectedFileURL?.pathExtension,
+           !ext.isEmpty {
+            name += ".\(ext)"
+        }
+
+        return name
     }
 }

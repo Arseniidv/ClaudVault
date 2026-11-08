@@ -15,6 +15,9 @@ final class BackupListViewModel {
     private(set) var records: [BackupRecord] = []
     private(set) var usedStorageBytes: Int64 = 0
     private(set) var localFilesBytes: Int64 = 0
+    /// Размер последней версии каждого бэкапа (id записи → байты).
+    /// Используется колонкой «Размер» в macOS-таблице.
+    private(set) var recordSizes: [UUID: Int64] = [:]
     private(set) var isLoading = false
     private(set) var isMutating = false
     
@@ -85,14 +88,25 @@ final class BackupListViewModel {
         }
     }
 
+    /// Последняя версия бэкапа — нужна для Quick Look
+    /// (скачивание облачного объекта по `cloudObjectID`).
+    func latestVersion(for recordID: UUID) -> BackupVersion? {
+        try? backupMetadataRepository
+            .fetchVersions(for: recordID)
+            .first
+    }
+
     private func recomputeLocalStats() {
         var bytes: Int64 = 0
+        var sizes: [UUID: Int64] = [:]
         for record in records {
             if let versions = try? backupMetadataRepository.fetchVersions(for: record.id),
                let latest = versions.first {
                 bytes += latest.fileSize
+                sizes[record.id] = latest.fileSize
             }
         }
         localFilesBytes = bytes
+        recordSizes = sizes
     }
 }

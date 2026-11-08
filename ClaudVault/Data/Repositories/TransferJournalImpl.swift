@@ -1,22 +1,40 @@
 import Foundation
 import SwiftData
 
-@MainActor
-final class TransferJournalImpl: TransferJournal {
+/// Журнал chunked-передач на собственном фоновом `ModelContext`.
+///
+/// `updateProgress` вызывается после каждого подтверждённого чанка
+/// (8 МБ) — при больших файлах это сотни fetch+save. Выполнять их
+/// на `mainContext` в `@MainActor`-движке нельзя: это грузит
+/// главный поток и ведёт к зависаниям UI. Выделенный контекст
+/// сериализуется через `NSLock`, а `@Model`-объекты никогда не
+/// покидают репозиторий (наружу уходят доменные `TransferRecord`).
+final class TransferJournalImpl: TransferJournal, @unchecked Sendable {
 
+    private let lock = NSLock()
     private let modelContext: ModelContext
 
-    init(modelContext: ModelContext) {
-        self.modelContext = modelContext
+    /// Владелец данных; nil — сеанса нет, журнал пуст.
+    private var ownerID: String? {
+        CurrentUserContext.shared.ownerID
+    }
+
+    init(modelContainer: ModelContainer) {
+        self.modelContext = ModelContext(modelContainer)
     }
 
     func begin(_ record: TransferRecord) async throws {
-        if let existing = try model(for: record.id) {
-            existing.apply(record)
-        } else {
-            modelContext.insert(TransferRecordModel(record: record))
+        try perform { context in
+            if let existing = try fetchModel(id: record.id, in: context) {
+                existing.apply(record)
+                existing.ownerID = ownerID ?? existing.ownerID
+            } else {
+                let model = TransferRecordModel(record: record)
+                model.ownerID = ownerID ?? ""
+                context.insert(model)
+            }
+            try context.save()
         }
-        try modelContext.save()
     }
 
     func updateProgress(
@@ -27,14 +45,16 @@ final class TransferJournalImpl: TransferJournal {
         hashValue: String? = nil,
         streamSHA256: String? = nil
     ) async throws {
-        guard let model = try model(for: id) else { return }
-        if let offset { model.offset = offset }
-        if let sessionState { model.sessionState = sessionState }
-        if let hashAlgorithm { model.expectedHashAlgorithm = hashAlgorithm }
-        if let hashValue { model.expectedHashValue = hashValue }
-        if let streamSHA256 { model.streamSHA256 = streamSHA256 }
-        model.updatedAt = .now
-        try modelContext.save()
+        try perform { context in
+            guard let model = try fetchModel(id: id, in: context) else { return }
+            if let offset { model.offset = offset }
+            if let sessionState { model.sessionState = sessionState }
+            if let hashAlgorithm { model.expectedHashAlgorithm = hashAlgorithm }
+            if let hashValue { model.expectedHashValue = hashValue }
+            if let streamSHA256 { model.streamSHA256 = streamSHA256 }
+            model.updatedAt = .now
+            try context.save()
+        }
     }
 
     func setState(
@@ -42,41 +62,63 @@ final class TransferJournalImpl: TransferJournal {
         state: TransferRecord.State,
         error: String? = nil
     ) async throws {
-        guard let model = try model(for: id) else { return }
-        model.stateRaw = state.rawValue
-        model.errorMessage = error
-        model.updatedAt = .now
-        try modelContext.save()
+        try perform { context in
+            guard let model = try fetchModel(id: id, in: context) else { return }
+            model.stateRaw = state.rawValue
+            model.errorMessage = error
+            model.updatedAt = .now
+            try context.save()
+        }
     }
 
     func pendingRecords() async throws -> [TransferRecord] {
-        let states = [
-            TransferRecord.State.pending.rawValue,
-            TransferRecord.State.uploading.rawValue,
-            TransferRecord.State.verifying.rawValue
-        ]
-        let descriptor = FetchDescriptor<TransferRecordModel>(
-            predicate: #Predicate { states.contains($0.stateRaw) }
-        )
-        return try modelContext.fetch(descriptor)
-            .map { $0.asRecord() }
-            .sorted { $0.createdAt < $1.createdAt }
+        guard let ownerID else { return [] }
+        return try perform { context in
+            let states = [
+                TransferRecord.State.pending.rawValue,
+                TransferRecord.State.uploading.rawValue,
+                TransferRecord.State.verifying.rawValue
+            ]
+            let descriptor = FetchDescriptor<TransferRecordModel>(
+                predicate: #Predicate {
+                    states.contains($0.stateRaw) && $0.ownerID == ownerID
+                }
+            )
+            return try context.fetch(descriptor)
+                .map { $0.asRecord() }
+                .sorted { $0.createdAt < $1.createdAt }
+        }
     }
 
     func record(id: UUID) async throws -> TransferRecord? {
-        try model(for: id)?.asRecord()
+        try perform { context in
+            try fetchModel(id: id, in: context)?.asRecord()
+        }
     }
 
     func delete(id: UUID) async throws {
-        guard let model = try model(for: id) else { return }
-        modelContext.delete(model)
-        try modelContext.save()
+        try perform { context in
+            guard let model = try fetchModel(id: id, in: context) else { return }
+            context.delete(model)
+            try context.save()
+        }
     }
 
-    private func model(for id: UUID) throws -> TransferRecordModel? {
+    // MARK: - Private
+
+    private func perform<T>(_ work: (ModelContext) throws -> T) throws -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try work(modelContext)
+    }
+
+    private func fetchModel(
+        id: UUID,
+        in context: ModelContext
+    ) throws -> TransferRecordModel? {
         let descriptor = FetchDescriptor<TransferRecordModel>(
             predicate: #Predicate { $0.id == id }
         )
-        return try modelContext.fetch(descriptor).first
+        return try context.fetch(descriptor).first
     }
 }

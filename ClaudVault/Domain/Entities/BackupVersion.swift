@@ -6,7 +6,9 @@ struct BackupVersion: Identifiable, Equatable, Codable {
 
     let fileSize: Int64
     let checksum: String
-    let cloudObjectID: String
+    /// `var`: у Dropbox id — это путь файла, после переименования
+    /// (`renameFile`) он меняется и сохраняется обратно в метаданные.
+    var cloudObjectID: String
     let uploadedAt: Date
 
     init(

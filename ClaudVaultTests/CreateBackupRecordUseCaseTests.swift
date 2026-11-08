@@ -6,6 +6,16 @@ import SwiftData
 @MainActor
 final class CreateBackupRecordUseCaseTests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        CurrentUserContext.shared.set("test-owner")
+    }
+
+    override func tearDown() {
+        CurrentUserContext.shared.set(nil)
+        super.tearDown()
+    }
+
     func testCreateAndFetchBackupRecord() throws {
         // Arrange
         let container = try CloudVaultModelContainer.make(

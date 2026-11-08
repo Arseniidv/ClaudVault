@@ -108,6 +108,7 @@ struct SynchronizationView: View {
     private var activeTransfersSection: some View {
         ActiveTransfersSectionView(
             tasks: viewModel.activeTasks,
+            onCancel: { viewModel.cancelTransfer(id: $0.id) },
             onDelete: { viewModel.deleteSession(id: $0.id) }
         )
     }

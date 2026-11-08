@@ -21,7 +21,12 @@ protocol BackupMetadataRepository {
 }
 extension BackupMetadataRepository {
     func calculateUsedStorage() throws -> Int64 {
-        let descriptor = FetchDescriptor<BackupVersionModel>()
+        guard let ownerID = CurrentUserContext.shared.ownerID else {
+            return 0
+        }
+        let descriptor = FetchDescriptor<BackupVersionModel>(
+            predicate: #Predicate { $0.ownerID == ownerID }
+        )
         let versions = try modelContext.fetch(descriptor)
 
         return versions.reduce(Int64.zero) { total, version in

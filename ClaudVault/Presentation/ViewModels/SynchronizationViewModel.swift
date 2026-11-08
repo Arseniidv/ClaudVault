@@ -72,13 +72,18 @@ final class SynchronizationViewModel {
         }
     }
 
-    /// Запускает периодическое обновление (1 раз в секунду).
+    /// Запускает периодическое обновление: 1 раз в секунду
+    /// пока есть активные передачи, иначе — раз в 5 секунд
+    /// (список завершённых/ошибок не нуждается в частом опросе).
     func startPolling() {
         guard pollingTask == nil else { return }
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                let interval: UInt64 = self?.hasActiveTransfers == true
+                    ? 1_000_000_000
+                    : 5_000_000_000
+                try? await Task.sleep(nanoseconds: interval)
             }
         }
     }
@@ -91,8 +96,18 @@ final class SynchronizationViewModel {
     // MARK: - Delete
 
     /// Удаляет сессию передачи из истории — любого статуса
-    /// (активная, failed, completed).
+    /// (активная, failed, completed). Активная загрузка
+    /// предварительно помечается отменённой, иначе она
+    /// продолжила бы идти «сиротой» без записи в хранилище.
     func deleteSession(id: UUID) {
+        if let session = sessions.first(where: {
+            $0.id == id && ($0.status == .pending
+                || $0.status == .uploading
+                || $0.status == .paused)
+        }) {
+            UploadCancellation.markCancelled(session.id)
+        }
+
         Task {
             do {
                 try await updateUploadProgress.executeDelete(id: id)
@@ -101,6 +116,13 @@ final class SynchronizationViewModel {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    /// Отменяет активную загрузку: флаг в `UploadCancellation`
+    /// остановит цикл провайдера на ближайшей границе чанка —
+    /// сессия перейдёт в `.failed` со статусом «Загрузка отменена».
+    func cancelTransfer(id: UUID) {
+        UploadCancellation.markCancelled(id)
     }
 
     // MARK: - Retry

@@ -4,6 +4,8 @@ struct SyncTaskCardView: View {
 
     let task: SyncTask
     var onDelete: (() -> Void)? = nil
+    /// Отмена идущей загрузки (только для `.transferring`).
+    var onCancel: (() -> Void)? = nil
 
     private var progressPercentage: Int {
         Int(min(max(task.progress, 0), 1) * 100)
@@ -37,6 +39,16 @@ struct SyncTaskCardView: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                if task.status == .transferring, let onCancel {
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.red.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Отменить загрузку")
+                }
 
                 if let onDelete {
                     Button(action: onDelete) {
@@ -110,6 +122,11 @@ struct SyncTaskCardView: View {
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
         )
         .contextMenu {
+            if task.status == .transferring, let onCancel {
+                Button(action: onCancel) {
+                    Label("Отменить загрузку", systemImage: "xmark.circle")
+                }
+            }
             if let onDelete {
                 Button(role: .destructive, action: onDelete) {
                     Label("Удалить", systemImage: "trash")
