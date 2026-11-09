@@ -1,12 +1,12 @@
 import Foundation
 
-struct SignOutUseCase{
+public struct SignOutUseCase{
     private let  repository:AuthRepository
     
-    init(repository: AuthRepository) {
+    public init(repository: AuthRepository) {
         self.repository = repository
     }
-    func execute() async throws{
+    public func execute() async throws{
         try await repository.signOut()
     }
 }

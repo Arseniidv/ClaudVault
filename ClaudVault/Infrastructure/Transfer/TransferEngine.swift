@@ -4,7 +4,7 @@ import Foundation
 /// журнал → верификация. Используется для загрузки локальных
 /// файлов и cloud-to-cloud переноса.
 @MainActor
-final class TransferEngine {
+public final class TransferEngine: BackupTransferEngine {
 
     private let journal: TransferJournal
     private let chunkSize: Int64
@@ -12,9 +12,17 @@ final class TransferEngine {
     /// Активная запись журнала текущей передачи (для отмены).
     private(set) var activeRecordID: UUID?
     /// Вызывается при изменении прогресса активной передачи (0...1).
-    var onProgress: (@Sendable (Double) -> Void)?
+    public var onProgress: (@Sendable (Double) -> Void)?
 
-    init(journal: TransferJournal, chunkSize: Int64 = 8 * 1024 * 1024) {
+    /// Флаг отмены, выставляемый `cancelActive()`.
+    ///
+    /// `Task.checkCancellation` в цикле движка ловит только отмену
+    /// внешней задачи — у вызовов из UseCase'ов (создание бэкапа,
+    /// перенос бэкапа между облаками) такой задачи нет, поэтому
+    /// движок проверяет этот флаг на каждой итерации.
+    private var cancelRequested = false
+
+    public init(journal: TransferJournal, chunkSize: Int64 = 8 * 1024 * 1024) {
         self.journal = journal
         self.chunkSize = chunkSize
     }
@@ -24,7 +32,7 @@ final class TransferEngine {
     /// Загружает локальный файл в облако чанками с журналированием.
     /// При `nil` от `makeUploadSession` бросает `.notImplemented` —
     /// вызывающий код откатывается на `repository.uploadFile`.
-    func uploadFile(
+    public func uploadFile(
         fileURL: URL,
         name: String,
         mimeType: String,
@@ -78,7 +86,7 @@ final class TransferEngine {
     /// верификации размера у приёмника.
     /// Бросает `.notImplemented`, если провайдеры не поддерживают
     /// chunked-передачу — вызывающий код использует fallback.
-    func transferFile(
+    public func transferFile(
         _ file: CloudFile,
         from sourceProvider: String,
         source: any CloudStorageRepository,
@@ -142,7 +150,7 @@ final class TransferEngine {
     /// `repoFor` возвращает репозиторий по `StorageProviderType.rawValue`.
     /// Записи, которые невозможно продолжить (протухшая сессия,
     /// удалённый локальный файл), помечаются `.failed`.
-    func resumePending(
+    public func resumePending(
         repoFor: (String) -> (any CloudStorageRepository)?
     ) async {
         guard let records = try? await journal.pendingRecords() else { return }
@@ -188,7 +196,7 @@ final class TransferEngine {
             totalSize: record.sizeBytes
         )
 
-        let uploaded = try await runUpload(
+        _ = try await runUpload(
             record: record,
             source: source,
             target: target,
@@ -221,7 +229,7 @@ final class TransferEngine {
                 ? nil : record.targetParentID
         )
 
-        let uploaded = try await runUpload(
+        _ = try await runUpload(
             record: record,
             source: chunkSource,
             target: target,
@@ -235,12 +243,14 @@ final class TransferEngine {
         try await journal.delete(id: record.id)
     }
 
-    /// Отмена текущей передачи: бросает задачу-цикл через Task
-    /// и помечает запись отменённой.
-    func cancelActive() async {
+    /// Отмена текущей передачи: выставляет флаг, который цикл
+    /// движка проверяет на каждой итерации, и помечает запись
+    /// отменённой. Остановка происходит на ближайшей границе
+    /// чанка — уже отправленный провайдеру фрагмент не прерываем.
+    public func cancelActive() async {
         guard let id = activeRecordID else { return }
+        cancelRequested = true
         try? await journal.setState(id: id, state: .cancelled)
-        // Task.checkCancellation в цикле движка завершит передачу.
     }
 
     // MARK: - Private
@@ -282,6 +292,10 @@ final class TransferEngine {
         parentFolderID: String?,
         existingSession: (session: any TransferSession, state: String)? = nil
     ) async throws -> CloudFile {
+        // Сбрасываем флаг отмены в начале каждой передачи:
+        // предыдущая отмена не должна убивать следующую загрузку.
+        cancelRequested = false
+
         let made: (session: any TransferSession, state: String)?
         if let existingSession {
             made = existingSession
@@ -313,6 +327,9 @@ final class TransferEngine {
             source: hashingSource,
             session: session,
             chunkSize: chunkSize,
+            shouldCancel: { [weak self] in
+                self?.cancelRequested ?? false
+            },
             onConfirmedOffset: { offset in
                 try await journal.updateProgress(
                     id: recordID,
@@ -382,14 +399,18 @@ final class TransferEngine {
 
 /// Общий цикл chunked-загрузки: источник → сессия → подтверждённое
 /// смещение → журнал. Не зависит от провайдера.
-enum ChunkedUploadRunner {
+public enum ChunkedUploadRunner {
 
     /// Запускает передачу до `source.totalSize`. `onConfirmedOffset`
     /// вызывается после каждого принятого провайдером фрагмента.
-    static func run(
+    /// `shouldCancel` — дополнительная проверка отмены (например,
+    /// флаг `TransferEngine.cancelActive`), срабатывает на границе
+    /// каждого чанка и перед `finish()`.
+    public static func run(
         source: any ChunkSource,
         session: any TransferSession,
         chunkSize: Int64,
+        shouldCancel: (() async -> Bool)? = nil,
         onConfirmedOffset: (Int64) async throws -> Void = { _ in }
     ) async throws -> CloudFile {
         let total = source.totalSize
@@ -398,6 +419,9 @@ enum ChunkedUploadRunner {
 
         while offset < total {
             try Task.checkCancellation()
+            if await shouldCancel?() == true {
+                throw CancellationError()
+            }
 
             guard let payload = try await source.chunk(
                 at: offset,
@@ -437,6 +461,13 @@ enum ChunkedUploadRunner {
                 offset = next
                 try await onConfirmedOffset(offset)
             }
+        }
+
+        // Финальная проверка: отмена, пришедшая на последнем чанке,
+        // не должна завершать передачу «успешно».
+        try Task.checkCancellation()
+        if await shouldCancel?() == true {
+            throw CancellationError()
         }
 
         return try await session.finish()

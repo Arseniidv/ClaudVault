@@ -103,6 +103,22 @@ final class OneDriveService {
         _ = try await send(itemURL(id), method: "DELETE")
     }
 
+    /// PATCH `/items/{id}` — переименование без перезагрузки
+    /// содержимого. id driveItem не меняется.
+    func renameFile(id: String, name: String) async throws -> CloudFile {
+        let body = try JSONSerialization.data(withJSONObject: ["name": name])
+        let data = try await send(
+            itemURL(id),
+            method: "PATCH",
+            body: body,
+            contentType: "application/json"
+        )
+        guard let item = try? JSONDecoder().decode(DriveItemDTO.self, from: data) else {
+            throw CloudStorageError.invalidResponse
+        }
+        return item.asCloudFile
+    }
+
     func searchFiles(query: String) async throws -> [CloudFile] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
@@ -182,6 +198,11 @@ final class OneDriveService {
         }
 
         let parent = parentFolderID.flatMap { $0.isEmpty ? nil : $0 }
+
+        // Отмена из Live Activity: до старта простой PUT
+        // не прерываем — для крупных файлов ниже есть
+        // покадровая проверка в `uploadChunks`.
+        try UploadCancellation.checkCancellation()
 
         if size <= simpleUploadLimit {
             // Простой PUT /content для небольших файлов.
@@ -368,10 +389,7 @@ final class OneDriveService {
         request.setValue("bytes */\(totalSize)", forHTTPHeaderField: "Content-Range")
         request.setValue("0", forHTTPHeaderField: "Content-Length")
 
-        let (data, response) = try await perform(request)
-        guard let http = response as? HTTPURLResponse else {
-            throw CloudStorageError.invalidResponse
-        }
+        let (data, http) = try await perform(request)
         guard http.statusCode == 202 else {
             throw Self.mapError(status: http.statusCode, data: data)
         }
@@ -488,7 +506,7 @@ final class OneDriveService {
         var lastItem: DriveItemDTO?
 
         while uploaded < totalSize {
-            try Task.checkCancellation()
+            try UploadCancellation.checkCancellation()
 
             while pending.count < Int(uploadChunkSize) && !sourceEOF {
                 guard let piece = try await readChunk(), !piece.isEmpty else {
@@ -776,7 +794,7 @@ final class OneDriveService {
         }
     }
 
-    static func isRetryable(_ error: CloudStorageError) -> Bool {
+    nonisolated static func isRetryable(_ error: CloudStorageError) -> Bool {
         switch error {
         case .network, .rateLimited:
             return true
@@ -787,7 +805,7 @@ final class OneDriveService {
         }
     }
 
-    static func backoffNanoseconds(attempt: Int) -> UInt64 {
+    nonisolated static func backoffNanoseconds(attempt: Int) -> UInt64 {
         let seconds = min(pow(2.0, Double(max(attempt - 1, 0))), 16)
         return UInt64(seconds * 1_000_000_000)
     }
