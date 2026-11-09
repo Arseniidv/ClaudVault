@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Клиент Microsoft Graph API для OneDrive (`/me/drive`).
 ///
@@ -7,6 +8,10 @@ import Foundation
 /// длительность медиа — `video`/`audio.duration` (ISO 8601).
 final class OneDriveService {
 
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "one-drive"
+    )
     private let session: URLSession
     private let tokenProvider: () async throws -> String
 
@@ -180,20 +185,15 @@ final class OneDriveService {
 
         if size <= simpleUploadLimit {
             // Простой PUT /content для небольших файлов.
-            let url = try contentURL(parent: parent, name: name)
-            var request = try await authorizedRequest(url: url, method: "PUT")
-            request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
-            request.setValue("replace", forHTTPHeaderField: "x-ms-file-upload-extra")
             let body = try Data(contentsOf: fileURL)
-            let (data, response) = try await perform(request, uploading: body)
-            guard (200..<300).contains(response.statusCode) else {
-                throw Self.mapError(status: response.statusCode, data: data)
-            }
-            guard let item = try? JSONDecoder().decode(DriveItemDTO.self, from: data) else {
-                throw CloudStorageError.invalidResponse
-            }
+            let file = try await simpleUpload(
+                body: body,
+                name: name,
+                mimeType: mimeType,
+                parent: parent
+            )
             progressHandler?(1.0)
-            return item.asCloudFile
+            return file
         }
 
         // Большие файлы — upload session с чанками.
@@ -273,7 +273,180 @@ final class OneDriveService {
         )
     }
 
-    private func createUploadSession(parent: String?, name: String) async throws -> URL {
+    /// Простой PUT `/content` — используется для файлов
+    /// до `simpleUploadLimit` и для пустых файлов из
+    /// `OneDriveTransferSession.finish`.
+    func simpleUpload(
+        body: Data,
+        name: String,
+        mimeType: String,
+        parent: String?
+    ) async throws -> CloudFile {
+        let url = try contentURL(parent: parent, name: name)
+        var request = try await authorizedRequest(url: url, method: "PUT")
+        request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+        request.setValue("replace", forHTTPHeaderField: "x-ms-file-upload-extra")
+        let (data, response) = try await perform(request, uploading: body)
+        guard (200..<300).contains(response.statusCode) else {
+            throw Self.mapError(status: response.statusCode, data: data)
+        }
+        guard let item = try? JSONDecoder().decode(DriveItemDTO.self, from: data) else {
+            throw CloudStorageError.invalidResponse
+        }
+        return item.asCloudFile
+    }
+
+    /// PUT фрагмента upload-сессии (`uploadUrl` уже
+    /// аутентифицирован — Authorization не нужен).
+    /// Тело — диапазон `[fileOffset, fileOffset+length)` файла
+    /// `chunkFile`. Если диапазон совпадает с файлом целиком,
+    /// используется `upload(for:fromFile:)`; иначе в память
+    /// читается только сам диапазон (размер чанка).
+    func uploadSessionFragment(
+        sessionURL: URL,
+        chunkFile: URL,
+        fileOffset: Int64,
+        length: Int64,
+        absoluteOffset: Int64,
+        totalSize: Int64
+    ) async throws -> (data: Data, response: HTTPURLResponse) {
+        var request = URLRequest(url: sessionURL)
+        request.httpMethod = "PUT"
+        request.setValue(
+            "bytes \(absoluteOffset)-\(absoluteOffset + length - 1)/\(totalSize)",
+            forHTTPHeaderField: "Content-Range"
+        )
+
+        let attributes = try? FileManager.default.attributesOfItem(
+            atPath: chunkFile.path
+        )
+        let fileSize = (attributes?[.size] as? NSNumber)?.int64Value ?? -1
+        let canUploadWholeFile = fileOffset == 0 && fileSize == length
+
+        do {
+            let data: Data
+            let response: URLResponse
+            if canUploadWholeFile {
+                (data, response) = try await session.upload(
+                    for: request,
+                    fromFile: chunkFile
+                )
+            } else {
+                let body = try Self.readFileRange(
+                    chunkFile,
+                    offset: fileOffset,
+                    length: length
+                )
+                (data, response) = try await session.upload(for: request, from: body)
+            }
+            guard let http = response as? HTTPURLResponse else {
+                throw CloudStorageError.invalidResponse
+            }
+            return (data, http)
+        } catch let error as CancellationError {
+            throw error
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch let error as CloudStorageError {
+            throw error
+        } catch {
+            throw CloudStorageError.network(error.localizedDescription)
+        }
+    }
+
+    /// Запрос статуса upload-сессии: пустой PUT с
+    /// `Content-Range: bytes */total`. Graph отвечает 202
+    /// и заголовком `Range: bytes=0-N` — возвращает число
+    /// гарантированно принятых байт. `nil` — сервер не сообщил
+    /// диапазон (считаем принятым 0).
+    func queryUploadSession(
+        sessionURL: URL,
+        totalSize: Int64
+    ) async throws -> Int64 {
+        var request = URLRequest(url: sessionURL)
+        request.httpMethod = "PUT"
+        request.setValue("bytes */\(totalSize)", forHTTPHeaderField: "Content-Range")
+        request.setValue("0", forHTTPHeaderField: "Content-Length")
+
+        let (data, response) = try await perform(request)
+        guard let http = response as? HTTPURLResponse else {
+            throw CloudStorageError.invalidResponse
+        }
+        guard http.statusCode == 202 else {
+            throw Self.mapError(status: http.statusCode, data: data)
+        }
+        guard let range = http.value(forHTTPHeaderField: "Range"),
+              let end = range
+                .split(separator: "=").last?
+                .split(separator: "-").last,
+              let endOffset = Int64(end) else {
+            return 0
+        }
+        return endOffset + 1
+    }
+
+    /// Отмена upload-сессии (best-effort): DELETE на `uploadUrl`.
+    /// Ошибки игнорируются — сессия и так истечёт сама.
+    func cancelUploadSession(sessionURL: URL) async {
+        var request = URLRequest(url: sessionURL)
+        request.httpMethod = "DELETE"
+        _ = try? await session.data(for: request)
+    }
+
+    /// Pre-authenticated `@microsoft.graph.downloadUrl` файла —
+    /// CDN-ссылка с поддержкой Range без Bearer-заголовка.
+    /// `nil` — свойство недоступно (нет файла/папка).
+    func downloadURL(for fileID: String) async throws -> URL? {
+        var url = itemURL(fileID)
+        url = try selectQuery(
+            url,
+            extraSelect: "@microsoft.graph.downloadUrl"
+        )
+        let data = try await send(url)
+        struct DownloadURLResponse: Decodable {
+            let downloadUrl: String?
+            enum CodingKeys: String, CodingKey {
+                case downloadUrl = "@microsoft.graph.downloadUrl"
+            }
+        }
+        guard let decoded = try? JSONDecoder().decode(
+            DownloadURLResponse.self,
+            from: data
+        ), let string = decoded.downloadUrl else {
+            return nil
+        }
+        return URL(string: string)
+    }
+
+    /// Читает `length` байт из `fileURL` начиная с `offset`.
+    /// Файл целиком в память не загружается.
+    static func readFileRange(
+        _ fileURL: URL,
+        offset: Int64,
+        length: Int64
+    ) throws -> Data {
+        guard length > 0 else { return Data() }
+        do {
+            let handle = try FileHandle(forReadingFrom: fileURL)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: UInt64(offset))
+            guard let data = try handle.read(upToCount: Int(length)),
+                  Int64(data.count) == length else {
+                throw CloudStorageError.operationFailed(
+                    "Файл изменился во время загрузки или не читается."
+                )
+            }
+            return data
+        } catch let error as CloudStorageError {
+            throw error
+        } catch {
+            throw CloudStorageError.operationFailed(
+                "Ошибка чтения файла: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    func createUploadSession(parent: String?, name: String) async throws -> URL {
         let url = parent.map { itemURL($0).appendingPathComponent("createUploadSession") }
             ?? baseURL.appendingPathComponent("root/createUploadSession")
 
@@ -434,20 +607,16 @@ final class OneDriveService {
                 }
                 let status = http.statusCode
                 if (200..<300).contains(status) {
-                    if FileManager.default.fileExists(atPath: destination.path) {
-                        try FileManager.default.removeItem(at: destination)
-                    }
-                    try FileManager.default.moveItem(at: tempURL, to: destination)
+                    // Атомарная подмена без предварительного
+                    // удаления существующего файла — AtomicFileMove.
+                    try AtomicFileMove.moveIntoPlace(tempURL, destination: destination)
                     return
                 }
 
                 let data = (try? Data(contentsOf: tempURL)) ?? Data()
-                #if DEBUG
-                print(
-                    "[OneDrive] HTTP \(status) GET \(requestURL.absoluteString)\n"
-                        + (String(data: data, encoding: .utf8) ?? "<binary>")
+                Self.logger.debug(
+                    "GET failed: HTTP \(status, privacy: .public)"
                 )
-                #endif
                 let error = Self.mapError(status: status, data: data)
                 if status == 401 && !didRetryAuth {
                     didRetryAuth = true
@@ -498,12 +667,16 @@ final class OneDriveService {
         return result.url ?? baseURL
     }
 
-    private func selectQuery(_ url: URL, extraTop: String? = nil) throws -> URL {
+    private func selectQuery(
+        _ url: URL,
+        extraTop: String? = nil,
+        extraSelect: String? = nil
+    ) throws -> URL {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             throw CloudStorageError.invalidResponse
         }
         var items = [
-            URLQueryItem(name: "$select", value: Self.itemFields),
+            URLQueryItem(name: "$select", value: extraSelect ?? Self.itemFields),
             URLQueryItem(name: "$top", value: extraTop ?? "200")
         ]
         if let existing = components.queryItems {
@@ -590,12 +763,9 @@ final class OneDriveService {
                 continue
             }
 
-            #if DEBUG
-            print(
-                "[OneDrive] HTTP \(status) \(method) \(url.absoluteString)\n"
-                    + (String(data: data, encoding: .utf8) ?? "<binary>")
+            Self.logger.debug(
+                "\(method, privacy: .public) failed: HTTP \(status, privacy: .public)"
             )
-            #endif
             let error = Self.mapError(status: status, data: data)
             if method == "GET", Self.isRetryable(error), attempt < maxRequestAttempts - 1 {
                 attempt += 1
@@ -606,7 +776,7 @@ final class OneDriveService {
         }
     }
 
-    private static func isRetryable(_ error: CloudStorageError) -> Bool {
+    static func isRetryable(_ error: CloudStorageError) -> Bool {
         switch error {
         case .network, .rateLimited:
             return true
@@ -617,14 +787,14 @@ final class OneDriveService {
         }
     }
 
-    private static func backoffNanoseconds(attempt: Int) -> UInt64 {
+    static func backoffNanoseconds(attempt: Int) -> UInt64 {
         let seconds = min(pow(2.0, Double(max(attempt - 1, 0))), 16)
         return UInt64(seconds * 1_000_000_000)
     }
 
     // MARK: - Error mapping
 
-    private static func mapError(status: Int, data: Data) -> CloudStorageError {
+    static func mapError(status: Int, data: Data) -> CloudStorageError {
         struct GraphErrorBody: Decodable {
             struct Detail: Decodable {
                 let code: String?
@@ -664,7 +834,7 @@ private struct DriveItemList: Decodable {
     let nextLink: String?
 }
 
-private struct DriveItemDTO: Decodable {
+struct DriveItemDTO: Decodable {
     let id: String
     let name: String
     let size: Int64?
@@ -676,6 +846,14 @@ private struct DriveItemDTO: Decodable {
 
     struct FileFacet: Decodable {
         let mimeType: String?
+        let hashes: HashesFacet?
+
+        struct HashesFacet: Decodable {
+            /// SHA-1 hex (строчными буквами, base64 в Graph —
+            /// см. ниже: Graph отдаёт base64, конвертируем).
+            let sha1Hash: String?
+            let quickXorHash: String?
+        }
     }
     struct FolderFacet: Decodable {}
     struct MediaFacet: Decodable {
@@ -694,13 +872,24 @@ private struct DriveItemDTO: Decodable {
             )
         }
 
+        var hashes: [ContentHash] = []
+        // Graph отдаёт sha1Hash в base64 — приводим к hex,
+        // чтобы сравнивать с локально вычисленным SHA-1.
+        if let b64 = file?.hashes?.sha1Hash,
+           let data = Data(base64Encoded: b64) {
+            hashes.append(
+                ContentHash(algorithm: .sha1, value: data.hexString)
+            )
+        }
+
         return CloudFile(
             id: id,
             name: name,
             mimeType: file?.mimeType ?? "application/octet-stream",
             sizeBytes: size,
             modifiedAt: Self.date(from: lastModifiedDateTime),
-            duration: Self.durationSeconds(from: video?.duration ?? audio?.duration)
+            duration: Self.durationSeconds(from: video?.duration ?? audio?.duration),
+            contentHashes: hashes
         )
     }
 
@@ -752,6 +941,14 @@ private struct ThumbnailSet: Decodable {
     let large: Size?
     let c400x400: Size?
     let c10000x10000: Size?
+}
+
+private extension Data {
+    /// HEX-представление байт (нижний регистр) — для сравнения
+    /// с чексуммами провайдеров.
+    var hexString: String {
+        map { String(format: "%02x", $0) }.joined()
+    }
 }
 
 private extension URL {

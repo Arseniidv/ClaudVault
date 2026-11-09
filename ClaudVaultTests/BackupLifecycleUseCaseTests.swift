@@ -13,8 +13,13 @@ final class BackupLifecycleUseCaseTests: XCTestCase {
                       sizeBytes: 0, modifiedAt: nil)
         )
         var deleteError: Error?
+        /// Метаданные для `fileMetadata(id:)` — id → CloudFile.
+        var metadataByID: [String: CloudFile] = [:]
+        /// Содержимое, которое «скачивается» через `downloadFile`.
+        var downloadContents = "hello"
         private(set) var uploadedCount = 0
         private(set) var deletedIDs: [String] = []
+        private(set) var downloadedIDs: [String] = []
 
         func getStorageUsage() async throws -> CloudStorageUsage {
             CloudStorageUsage(usedBytes: 0, totalBytes: 0, availableBytes: 0)
@@ -26,7 +31,19 @@ final class BackupLifecycleUseCaseTests: XCTestCase {
         func signOut() async throws {}
         func listFiles(parentFolderID: String?) async throws -> [CloudFile] { [] }
         func fileMetadata(id: String) async throws -> CloudFile {
+            if let file = metadataByID[id] { return file }
             throw CloudStorageError.notFound
+        }
+        func downloadFile(
+            id: String,
+            to destination: URL,
+            progressHandler: (@Sendable (Double) -> Void)?
+        ) async throws {
+            downloadedIDs.append(id)
+            try downloadContents.write(
+                to: destination, atomically: true, encoding: .utf8
+            )
+            progressHandler?(1.0)
         }
         func createFolder(name: String, parentFolderID: String?) async throws -> CloudFile {
             throw CloudStorageError.notImplemented
@@ -67,7 +84,7 @@ final class BackupLifecycleUseCaseTests: XCTestCase {
     ) -> ReparseAndBackupUseCase {
         let fileAccess = LocalFileAccess()
         let hasher = SHA256FileHasher()
-        let uploadRepository = UploadSessionRepositoryImpl(modelContext: container.mainContext)
+        let uploadRepository = UploadSessionRepositoryImpl(modelContainer: container)
         return ReparseAndBackupUseCase(
             backupRepository: repository,
             cloudStorageRepository: cloud,
@@ -173,7 +190,7 @@ final class BackupLifecycleUseCaseTests: XCTestCase {
         XCTAssertEqual(versions.count, 2)
 
         // Сессия загрузки завершена.
-        let uploadRepository = UploadSessionRepositoryImpl(modelContext: container.mainContext)
+        let uploadRepository = UploadSessionRepositoryImpl(modelContainer: container)
         let sessions = try await uploadRepository.fetchAll()
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.status, .completed)
@@ -268,5 +285,235 @@ final class BackupLifecycleUseCaseTests: XCTestCase {
 
         let fetched = try repository.fetchRecord(bySource: "src-del3")
         XCTAssertNil(fetched, "Запись должна быть удалена, если облачный объект уже отсутствует")
+    }
+
+    // MARK: - Provider routing
+
+    /// Удаление версии должно идти в облако записи
+    /// (`record.storageProvider`), а не всегда в Google Drive.
+    func testDeleteVersionRoutesToRecordProvider() async throws {
+        let container = try makeContainer()
+        let repository = BackupMetadataRepositoryImpl(modelContext: container.mainContext)
+        let google = MockCloudStorageRepository()
+        let dropbox = MockCloudStorageRepository()
+
+        let record = BackupRecord(
+            fileName: "e.txt",
+            sourceIdentifier: "src-dropbox",
+            storageProvider: .dropbox
+        )
+        try repository.saveRecord(record)
+        let version = BackupVersion(
+            backupRecordID: record.id,
+            fileSize: 10,
+            checksum: "abc",
+            cloudObjectID: "dropbox-object"
+        )
+        try repository.saveVersion(version, for: record.id)
+
+        let useCase = DeleteBackupUseCase(
+            backupRepository: repository,
+            cloudStorageRepository: google,
+            repositories: [.googleDrive: google, .dropbox: dropbox]
+        )
+
+        try await useCase.execute(version: version)
+
+        XCTAssertEqual(dropbox.deletedIDs, ["dropbox-object"])
+        XCTAssertTrue(google.deletedIDs.isEmpty)
+    }
+
+    /// Создание бэкапа с выбранным облаком: загрузка идёт
+    /// в Dropbox, провайдер записи обновляется.
+    func testCreateBackupUploadsToSelectedProvider() async throws {
+        let container = try makeContainer()
+        let repository = BackupMetadataRepositoryImpl(modelContext: container.mainContext)
+        let google = MockCloudStorageRepository()
+        let dropbox = MockCloudStorageRepository()
+        let fileURL = try makeTempFile(contents: "manual-file")
+
+        dropbox.uploadResult = .success(
+            CloudFile(id: "dropbox-new", name: "manual-file.txt",
+                      mimeType: "text/plain", sizeBytes: 12, modifiedAt: nil)
+        )
+
+        let uploadRepository = UploadSessionRepositoryImpl(
+            modelContainer: container
+        )
+        let useCase = CreateBackupWithUploadUseCase(
+            backupRepository: repository,
+            cloudStorageRepository: google,
+            repositories: [.googleDrive: google, .dropbox: dropbox],
+            fileHasher: SHA256FileHasher(),
+            fileAccessRepository: LocalFileAccess(),
+            uploadSessionRepository: uploadRepository,
+            saveUploadSessionUseCase: SaveUploadSessionUseCase(
+                repository: uploadRepository
+            ),
+            updateUploadProgressUseCase: UpdateUploadProgressUseCase(
+                repository: uploadRepository
+            )
+        )
+
+        let record = try await useCase.execute(
+            fileName: "manual-file.txt",
+            sourceIdentifier: "src-manual-dropbox",
+            fileURL: fileURL,
+            parentFolderID: nil,
+            storageProvider: .dropbox
+        ) { _ in }
+
+        XCTAssertEqual(dropbox.uploadedCount, 1)
+        XCTAssertEqual(google.uploadedCount, 0)
+        XCTAssertEqual(record.storageProvider, .dropbox)
+
+        let versions = try repository.fetchVersions(for: record.id)
+        XCTAssertEqual(versions.first?.cloudObjectID, "dropbox-new")
+    }
+
+    /// Повторный анализ загружает новую версию в облако записи.
+    func testReparseUploadsToRecordProvider() async throws {
+        let container = try makeContainer()
+        let repository = BackupMetadataRepositoryImpl(modelContext: container.mainContext)
+        let google = MockCloudStorageRepository()
+        let dropbox = MockCloudStorageRepository()
+        let fileURL = try makeTempFile(contents: "reparse-v2")
+
+        let record = BackupRecord(
+            fileName: "r.txt",
+            sourceIdentifier: "src-reparse-dropbox",
+            storageProvider: .dropbox
+        )
+        try repository.saveRecord(record)
+
+        dropbox.uploadResult = .success(
+            CloudFile(id: "dropbox-v2", name: "r.txt",
+                      mimeType: "text/plain", sizeBytes: 11, modifiedAt: nil)
+        )
+
+        let uploadRepository = UploadSessionRepositoryImpl(
+            modelContainer: container
+        )
+        let useCase = ReparseAndBackupUseCase(
+            backupRepository: repository,
+            cloudStorageRepository: google,
+            repositories: [.googleDrive: google, .dropbox: dropbox],
+            fileHasher: SHA256FileHasher(),
+            fileAccessRepository: LocalFileAccess(),
+            uploadSessionRepository: uploadRepository,
+            saveUploadSessionUseCase: SaveUploadSessionUseCase(
+                repository: uploadRepository
+            ),
+            updateUploadProgressUseCase: UpdateUploadProgressUseCase(
+                repository: uploadRepository
+            )
+        )
+
+        let version = try await useCase.execute(
+            sourceIdentifier: "src-reparse-dropbox",
+            fileURL: fileURL,
+            parentFolderID: nil
+        ) { _ in }
+
+        XCTAssertNotNil(version)
+        XCTAssertEqual(version?.cloudObjectID, "dropbox-v2")
+        XCTAssertEqual(dropbox.uploadedCount, 1)
+        XCTAssertEqual(google.uploadedCount, 0)
+    }
+
+    // MARK: - Backup transfer between clouds
+
+    private func makeTransferFixture(
+        container: ModelContainer
+    ) throws -> (
+        repository: BackupMetadataRepositoryImpl,
+        google: MockCloudStorageRepository,
+        dropbox: MockCloudStorageRepository,
+        record: BackupRecord
+    ) {
+        let repository = BackupMetadataRepositoryImpl(
+            modelContext: container.mainContext
+        )
+        let google = MockCloudStorageRepository()
+        let dropbox = MockCloudStorageRepository()
+
+        google.metadataByID["g1"] = CloudFile(
+            id: "g1", name: "photo.heic", mimeType: "image/heic",
+            sizeBytes: 5, modifiedAt: nil
+        )
+        dropbox.uploadResult = .success(
+            CloudFile(id: "d1", name: "photo.heic", mimeType: "image/heic",
+                      sizeBytes: 5, modifiedAt: nil)
+        )
+        dropbox.metadataByID["d1"] = CloudFile(
+            id: "d1", name: "photo.heic", mimeType: "image/heic",
+            sizeBytes: 5, modifiedAt: nil
+        )
+        google.downloadContents = "hello"
+
+        let record = BackupRecord(
+            fileName: "photo.heic",
+            sourceIdentifier: "src-transfer",
+            storageProvider: .googleDrive
+        )
+        try repository.saveRecord(record)
+        try repository.saveVersion(
+            BackupVersion(
+                backupRecordID: record.id,
+                fileSize: 5,
+                checksum: "abc",
+                cloudObjectID: "g1"
+            ),
+            for: record.id
+        )
+
+        return (repository, google, dropbox, record)
+    }
+
+    /// Копирование Google → Dropbox: метаданные версии и
+    /// провайдер записи обновляются, источник не удаляется.
+    func testTransferBackupCopyGoogleToDropbox() async throws {
+        let container = try makeContainer()
+        let (repository, google, dropbox, record) =
+            try makeTransferFixture(container: container)
+
+        let useCase = TransferBackupToProviderUseCase(
+            backupRepository: repository,
+            cloudStorageRepository: google,
+            repositories: [.googleDrive: google, .dropbox: dropbox],
+            transferEngine: nil
+        )
+
+        try await useCase.execute(record: record, to: .dropbox, move: false)
+
+        let versions = try repository.fetchVersions(for: record.id)
+        XCTAssertEqual(versions.first?.cloudObjectID, "d1")
+        XCTAssertEqual(google.downloadedIDs, ["g1"])
+        XCTAssertTrue(google.deletedIDs.isEmpty, "copy не удаляет источник")
+
+        let fresh = try repository.fetchRecord(id: record.id)
+        XCTAssertEqual(fresh?.storageProvider, .dropbox)
+    }
+
+    /// Перемещение Google → Dropbox: источник удаляется
+    /// только после успешного копирования и обновления
+    /// метаданных.
+    func testTransferBackupMoveDeletesSource() async throws {
+        let container = try makeContainer()
+        let (repository, google, dropbox, record) =
+            try makeTransferFixture(container: container)
+
+        let useCase = TransferBackupToProviderUseCase(
+            backupRepository: repository,
+            cloudStorageRepository: google,
+            repositories: [.googleDrive: google, .dropbox: dropbox],
+            transferEngine: nil
+        )
+
+        try await useCase.execute(record: record, to: .dropbox, move: true)
+
+        XCTAssertEqual(google.deletedIDs, ["g1"])
+        let versions = try repository.fetchVersions(for: record.id)
+        XCTAssertEqual(versions.first?.cloudObjectID, "d1")
     }
 }

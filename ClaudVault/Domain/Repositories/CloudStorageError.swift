@@ -3,7 +3,7 @@ import Foundation
 /// Ошибки операций с облачным хранилищем.
 /// SDK-специфичные ошибки маппятся в Data/Infrastructure,
 /// поэтому Presentation видит только этот тип.
-enum CloudStorageError: LocalizedError, Equatable {
+public enum CloudStorageError: LocalizedError, Equatable {
     case notConfigured
     case cancelled
     case notConnected
@@ -19,7 +19,7 @@ enum CloudStorageError: LocalizedError, Equatable {
     case operationFailed(String)
     case notImplemented
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .notConfigured:
             return "Облачное хранилище не настроено: отсутствует клиентский ID (Info.plist)."

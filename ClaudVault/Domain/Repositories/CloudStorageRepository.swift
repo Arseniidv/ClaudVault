@@ -1,6 +1,6 @@
 import Foundation
 
-protocol CloudStorageRepository {
+public protocol CloudStorageRepository {
     func getStorageUsage() async throws -> CloudStorageUsage
     func connect() async throws -> CloudStorageAccount
     func restoreConnection() async throws -> CloudStorageAccount?
@@ -16,6 +16,12 @@ protocol CloudStorageRepository {
         progressHandler: (@Sendable (Double) -> Void)?
     ) async throws -> CloudFile
     func deleteFile(id: String) async throws
+
+    /// Переименовывает файл/папку без перезагрузки содержимого
+    /// и возвращает обновлённые метаданные. У Dropbox `id`
+    /// является путём — после переименования он меняется,
+    /// вызывающий код должен обновить `cloudObjectID` у версий.
+    func renameFile(id: String, name: String) async throws -> CloudFile
 
     /// Скачивает файл по `id` в локальный `destination`.
     /// Для папок не поддерживается — используется при переносе
@@ -49,6 +55,24 @@ protocol CloudStorageRepository {
         progressHandler: (@Sendable (Double) -> Void)?
     ) async throws -> CloudFile
 
+    /// Создаёт (или восстанавливает по `resumeState`) сессию
+    /// chunked-загрузки у провайдера. Возвращает сессию и её
+    /// сериализуемое состояние для журнала передач (без токенов).
+    /// `nil` — провайдер не поддерживает сессии или `resumeState`
+    /// протух: вызывающий код должен повторить с `resumeState: nil`.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)?
+
+    /// Возвращает потоковый источник байтов файла (Range-запросы
+    /// с обновлением авторизации) для cloud-to-cloud передачи
+    /// без промежуточного файла на диске. `nil` — не поддерживается.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)?
+
     /// Поиск файлов по имени по всему хранилищу.
     func searchFiles(query: String) async throws -> [CloudFile]
 
@@ -67,12 +91,12 @@ protocol CloudStorageRepository {
 
 extension CloudStorageRepository {
     /// Провайдеры без полноценного поиска возвращают пустой результат.
-    func searchFiles(query: String) async throws -> [CloudFile] {
+    public func searchFiles(query: String) async throws -> [CloudFile] {
         []
     }
 
     /// Провайдеры без скачивания файлов сообщают `.notImplemented`.
-    func downloadFile(
+    public func downloadFile(
         id: String,
         to destination: URL,
         progressHandler: (@Sendable (Double) -> Void)?
@@ -81,13 +105,17 @@ extension CloudStorageRepository {
     }
 
     /// Провайдеры без «виртуальных» файлов используют обычное скачивание.
-    func downloadPreviewFile(
+    public func downloadPreviewFile(
         id: String,
         name: String,
         mimeType: String,
         into directory: URL
     ) async throws -> URL {
-        let destination = directory.appendingPathComponent(name)
+        // Имя приходит из облачных метаданных — перед записью
+        // на диск санитизируем, чтобы ".."/разделители не вывели
+        // файл за пределы целевой директории.
+        let safeName = SafeFileName.sanitized(name, fallback: "download")
+        let destination = directory.appendingPathComponent(safeName)
         try await downloadFile(
             id: id,
             to: destination,
@@ -96,21 +124,42 @@ extension CloudStorageRepository {
         return destination
     }
 
+    /// Провайдеры без переименования.
+    public func renameFile(id: String, name: String) async throws -> CloudFile {
+        throw CloudStorageError.notImplemented
+    }
+
     /// Провайдеры без миниатюр возвращают nil.
-    func thumbnailData(for file: CloudFile) async throws -> Data? {
+    public func thumbnailData(for file: CloudFile) async throws -> Data? {
         nil
     }
 
     /// Провайдеры без прямых ссылок для стриминга.
-    func streamDescriptor(
+    public func streamDescriptor(
         for file: CloudFile
     ) async throws -> CloudMediaStream {
         throw CloudStorageError.notImplemented
     }
 
+    /// Провайдеры без chunked-загрузки через TransferSession.
+    public func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        nil
+    }
+
+    /// Провайдеры без потокового источника Range-скачивания.
+    public func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)? {
+        nil
+    }
+
     /// Провайдеры без chunked-загрузки — вызывающий код
     /// должен откатиться на загрузку из файла.
-    func uploadStreamedFile(
+    public func uploadStreamedFile(
         name: String,
         mimeType: String,
         parentFolderID: String?,
