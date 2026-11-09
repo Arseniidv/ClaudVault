@@ -1,6 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 import SwiftyDropbox
+import OSLog
 
 /// Реализация `CloudStorageRepository` поверх SwiftyDropbox.
 ///
@@ -8,6 +9,11 @@ import SwiftyDropbox
 /// он стабилен между запросами и подходит для `getMetadata`/`deleteV2`,
 /// в отличие от file id, который требует других эндпоинтов.
 final class DropboxRepositoryImpl: CloudStorageRepository {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "dropbox"
+    )
 
     private let authManager: DropboxAuthManager
 
@@ -55,14 +61,10 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
         } catch let error as CallError<Files.ListFolderError> {
-            #if DEBUG
-            print("[Dropbox] listFolder(path: \(path)) failed: \(error)")
-            #endif
+            Self.logger.debug("listFolder failed")
             throw DropboxAuthManager.mapError(error)
         } catch let error as CallError<Files.ListFolderContinueError> {
-            #if DEBUG
-            print("[Dropbox] listFolderContinue failed: \(error)")
-            #endif
+            Self.logger.debug("listFolderContinue failed")
             throw DropboxAuthManager.mapError(error)
         }
     }
@@ -102,6 +104,11 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
         }
     }
 
+    /// Файлы больше этого порога грузятся через upload-сессию:
+    /// `/files/upload` имеет жёсткий лимит ~150 МБ (фото ProRAW,
+    /// видео), а сессия — до 350 ГБ.
+    private static let sessionUploadThreshold: Int64 = 64 * 1024 * 1024
+
     /// `progressHandler` получает долю завершённой загрузки (0...1)
     /// по мере передачи данных.
     func uploadFile(
@@ -109,11 +116,33 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
         parentFolderID: String?,
         progressHandler: (@Sendable (Double) -> Void)?
     ) async throws -> CloudFile {
-        let client = try authorizedClient()
         let path = Self.joinPath(
             parent: parentFolderID,
             name: fileURL.lastPathComponent
         )
+
+        guard let attributes = try? FileManager.default.attributesOfItem(
+            atPath: fileURL.path
+        ),
+              let size = (attributes[.size] as? NSNumber)?.int64Value else {
+            throw CloudStorageError.operationFailed("Файл недоступен для чтения.")
+        }
+
+        // Большие файлы — только через upload-сессию: простой
+        // /files/upload отклоняет всё, что больше ~150 МБ.
+        if size > Self.sessionUploadThreshold {
+            let session = DropboxTransferSession.begin(commitPath: path)
+            let source = FileChunkSource(fileURL: fileURL, totalSize: size)
+            return try await ChunkedUploadRunner.run(
+                source: source,
+                session: session,
+                chunkSize: 8 * 1024 * 1024
+            ) { offset in
+                progressHandler?(min(1.0, Double(offset) / Double(max(size, 1))))
+            }
+        }
+
+        let client = try authorizedClient()
 
         do {
             var request = client.files.upload(
@@ -136,6 +165,59 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
             return file
         } catch let error as CallError<Files.UploadError> {
             throw DropboxAuthManager.mapError(error)
+        }
+    }
+
+    /// Upload-сессия Dropbox для TransferEngine.
+    /// Состояние — `dbx:<sessionId>:<offset>`; без sessionId
+    /// (сессия ещё не начата) состояние пустое и resume
+    /// восстанавливает только offset=0.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        let path = Self.joinPath(parent: parentFolderID, name: name)
+
+        if let resumeState, !resumeState.isEmpty {
+            guard var session = DropboxTransferSession.restore(
+                resumeState: resumeState,
+                commitPath: path
+            ) else {
+                return nil
+            }
+            session.setCommitPath(path)
+            return (session, session.stateValue)
+        }
+
+        let session = DropboxTransferSession.begin(commitPath: path)
+        return (session, session.stateValue)
+    }
+
+    /// Временная ссылка Dropbox (~4 ч) как Range-источник
+    /// cloud-to-cloud передачи. Ссылка без авторизации.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)? {
+        guard let sizeBytes = file.sizeBytes, sizeBytes >= 0 else {
+            return nil
+        }
+        let client = try authorizedClient()
+
+        do {
+            let result = try await client.files
+                .getTemporaryLink(path: file.id)
+                .response()
+            guard let url = URL(string: result.link) else {
+                return nil
+            }
+            return HTTPRangeChunkSource(
+                url: url,
+                totalSize: sizeBytes,
+                headersProvider: { [:] }
+            )
+        } catch {
+            return nil
         }
     }
 
@@ -406,13 +488,20 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
     private static func mapMetadata(_ metadata: Files.Metadata) -> CloudFile? {
         switch metadata {
         case let file as Files.FileMetadata:
+            var hashes: [ContentHash] = []
+            if let contentHash = file.contentHash, !contentHash.isEmpty {
+                hashes.append(
+                    ContentHash(algorithm: .dropboxContent, value: contentHash)
+                )
+            }
             return CloudFile(
                 id: pathID(for: file),
                 name: file.name,
                 mimeType: mimeType(for: file.name),
                 sizeBytes: Int64(min(file.size, UInt64(Int64.max))),
                 modifiedAt: file.serverModified,
-                duration: videoDuration(from: file)
+                duration: videoDuration(from: file),
+                contentHashes: hashes
             )
         case let folder as Files.FolderMetadata:
             return mapFolder(folder)

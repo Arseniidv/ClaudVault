@@ -9,7 +9,7 @@
 
 import Foundation
 
-enum AuthError: LocalizedError, Equatable {
+public enum AuthError: LocalizedError, Equatable {
     case invalidCredentials
     case userNotFound
     case emailAlreadyInUse
@@ -20,7 +20,7 @@ enum AuthError: LocalizedError, Equatable {
     case sessionExpired
     case unknown(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidCredentials:
             return "Неверный email или пароль."

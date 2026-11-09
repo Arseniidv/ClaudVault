@@ -1,6 +1,6 @@
 import Foundation
 
-protocol FileAccessRepository {
+public protocol FileAccessRepository {
     nonisolated func withAccess<T>(
         to url: URL,
         perform operation: (URL) throws -> T
@@ -13,7 +13,7 @@ extension FileAccessRepository {
     /// позже восстановить URL через `urlForBookmark`.
     /// Security-scope сам по себе не сохраняется в bookmark —
     /// доступ возобновляется через `startAccessingSecurityScopedResource`.
-    func makeSecurityScopedBookmark(for url: URL) throws -> Data {
+    public func makeSecurityScopedBookmark(for url: URL) throws -> Data {
         try withAccess(to: url) { accessibleURL in
             try accessibleURL.bookmarkData(
                 options: [.minimalBookmark],
@@ -24,7 +24,7 @@ extension FileAccessRepository {
     }
 
     /// Восстанавливает URL из сохранённого bookmark.
-    func urlForBookmark(_ data: Data) throws -> URL {
+    public func urlForBookmark(_ data: Data) throws -> URL {
         var isStale = false
         let url = try URL(
             resolvingBookmarkData: data,
@@ -36,7 +36,7 @@ extension FileAccessRepository {
     }
 
     /// Удобная обёртка: bookmark (base64) -> URL.
-    func urlForBookmark(base64: String) throws -> URL {
+    public func urlForBookmark(base64: String) throws -> URL {
         guard let data = Data(base64Encoded: base64) else {
             throw FileAccessError.invalidURL
         }
@@ -44,14 +44,14 @@ extension FileAccessRepository {
     }
 }
 
-enum FileAccessError: LocalizedError {
+public enum FileAccessError: LocalizedError {
     case coordinationFailed
     case fileNotFound
     case accessDenied
     case invalidFile
     case invalidURL
     
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .coordinationFailed:
             return "Не удалось получить доступ к файлу."

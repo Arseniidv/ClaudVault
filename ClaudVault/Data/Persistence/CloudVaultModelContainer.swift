@@ -12,7 +12,8 @@ enum CloudVaultModelContainer {
             BackupRecordModel.self,
             BackupVersionModel.self,
             UploadSessionModel.self,
-            CloudFileModel.self
+            CloudFileModel.self,
+            TransferRecordModel.self
         ])
 
         let configuration = ModelConfiguration(

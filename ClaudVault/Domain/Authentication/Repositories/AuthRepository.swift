@@ -1,7 +1,7 @@
 
 import Foundation
 
-protocol AuthRepository {
+public protocol AuthRepository {
     func signIn(
         email: String,
         password: String
@@ -14,6 +14,8 @@ protocol AuthRepository {
     ) async throws -> AuthUser
 
     func signOut() async throws
+
+    func updateProfile(name: String) async throws -> AuthUser
 
     func resetPassword(
         email: String

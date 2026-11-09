@@ -19,6 +19,7 @@ struct BackupListView: View {
     private let createBackupWithUpload: CreateBackupWithUploadUseCase
     private let deleteBackupUseCase: DeleteBackupUseCase
     private let reparseAndBackupUseCase: ReparseAndBackupUseCase
+    private let transferBackupToProvider: TransferBackupToProviderUseCase?
     private let fetchBackupVersions: FetchBackupVersionsUseCase
     /// Роутер deep link'ов виджета (`claudvault://backup/new?mode=…`).
     private let actionRouter: BackupActionRouter?
@@ -45,6 +46,7 @@ struct BackupListView: View {
         createBackupWithUpload: CreateBackupWithUploadUseCase,
         deleteBackupUseCase: DeleteBackupUseCase,
         reparseAndBackupUseCase: ReparseAndBackupUseCase,
+        transferBackupToProvider: TransferBackupToProviderUseCase? = nil,
         fetchBackupVersions: FetchBackupVersionsUseCase,
         actionRouter: BackupActionRouter? = nil
     ) {
@@ -64,6 +66,7 @@ struct BackupListView: View {
         self.createBackupWithUpload = createBackupWithUpload
         self.deleteBackupUseCase = deleteBackupUseCase
         self.reparseAndBackupUseCase = reparseAndBackupUseCase
+        self.transferBackupToProvider = transferBackupToProvider
         self.fetchBackupVersions = fetchBackupVersions
         self.actionRouter = actionRouter
     }
@@ -295,6 +298,7 @@ struct BackupListView: View {
             fileAccessRepository: fileAccessRepository,
             fileHasher: fileHasher,
             createBackupWithUpload: createBackupWithUpload,
+            availableProviders: storagesViewModel.connectedProviders,
             initialFileURL: initialFileURL,
             autoOpenImporter: autoOpenImporter,
             onCreated: {
@@ -310,6 +314,8 @@ struct BackupListView: View {
             fetchBackupVersions: fetchBackupVersions,
             deleteBackupUseCase: deleteBackupUseCase,
             reparseAndBackupUseCase: reparseAndBackupUseCase,
+            transferBackupToProvider: transferBackupToProvider,
+            transferTargets: storagesViewModel.connectedProviders,
             backupMetadataRepository: backupMetadataRepository
         )
         detailViewModel.onDataChanged = { [storagesViewModel] in

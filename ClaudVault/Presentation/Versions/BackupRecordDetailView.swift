@@ -16,6 +16,7 @@ struct BackupRecordDetailView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     recordHeader
                     reparseSection
+                    transferSection
                     versionsSection
                     deleteSection
                 }
@@ -166,6 +167,90 @@ struct BackupRecordDetailView: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(viewModel.isMutating)
+    }
+
+    // MARK: - Transfer to another cloud
+
+    /// Перенос всех версий копии в другое подключённое облако:
+    /// «Скопировать» — дубликат в целевом облаке, исходник
+    /// остаётся; «Переместить» — исходные объекты удаляются
+    /// после проверки приёмника.
+    @ViewBuilder
+    private var transferSection: some View {
+        if !viewModel.transferTargets.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Перенос в другое облако")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                if let progress = viewModel.transferProgress {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ProgressView(value: progress)
+                            .tint(.blue)
+                        Text("Перенос… \(Int(progress * 100))%")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    .padding(16)
+                    .background(Color.white.opacity(0.045))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                } else {
+                    ForEach(viewModel.transferTargets) { target in
+                        transferTargetRow(target)
+                    }
+                }
+            }
+        }
+    }
+
+    private func transferTargetRow(_ target: StorageProviderType) -> some View {
+        Menu {
+            Button {
+                viewModel.transferToProvider(target, move: false)
+            } label: {
+                Label(
+                    "Скопировать в \(target.name)",
+                    systemImage: "plus.doc.on.doc"
+                )
+            }
+            Button(role: .destructive) {
+                viewModel.transferToProvider(target, move: true)
+            } label: {
+                Label(
+                    "Переместить в \(target.name)",
+                    systemImage: "arrow.right.doc.on.clipboard"
+                )
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: target.icon)
+                    .font(.system(size: 18))
+                    .foregroundStyle(target.tint)
+                    .frame(width: 34, height: 34)
+                    .background(Color.white.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(target.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+
+                    Text("Все версии копии → \(target.name)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+
+                Spacer()
+
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.045))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
         .disabled(viewModel.isMutating)
     }
 
