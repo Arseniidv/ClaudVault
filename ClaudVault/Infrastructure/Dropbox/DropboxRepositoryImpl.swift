@@ -2,6 +2,7 @@ import Foundation
 import UniformTypeIdentifiers
 import SwiftyDropbox
 import OSLog
+import ClaudVaultDomain
 
 /// Реализация `CloudStorageRepository` поверх SwiftyDropbox.
 ///
@@ -32,7 +33,7 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
     }
 
     func signOut() async throws {
-        authManager.signOut()
+        try await authManager.signOut()
     }
 
     // MARK: - Files

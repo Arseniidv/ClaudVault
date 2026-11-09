@@ -27,18 +27,18 @@ struct AuthTextField: View {
 
             Text(title)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(.primary.opacity(0.75))
 
             HStack(spacing: 12) {
 
                 Image(systemName: systemImage)
                     .font(.system(size: 17))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.primary.opacity(0.55))
                     .frame(width: 22)
 
                 TextField(placeholder, text: $text)
                     .font(.system(size: 15))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .autocorrectionDisabled()
                     #if canImport(UIKit)
                     .keyboardType(keyboardType)
@@ -48,11 +48,11 @@ struct AuthTextField: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 56)
-            .background(Color.white.opacity(0.055))
+            .background(Color.primary.opacity(0.055))
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             }
         }
     }

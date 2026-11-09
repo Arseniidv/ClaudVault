@@ -1,10 +1,17 @@
 import Foundation
 import Observation
 import UniformTypeIdentifiers
+import OSLog
+import ClaudVaultDomain
 
 @MainActor
 @Observable
 final class StoragesViewModel {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "storages"
+    )
 
     // MARK: - Provider State
 
@@ -28,7 +35,18 @@ final class StoragesViewModel {
         var errorMessage: String?
         var successMessage: String?
         var selectedFile: CloudFile?
-        var didRestore = false
+        /// Явное состояние восстановления: `nil` от repository —
+        /// это `unavailable` (нет credentials), а не успех, поэтому
+        /// retry не должен крутиться по кругу.
+        var restoreState: RestoreState = .notStarted
+
+        enum RestoreState {
+            case notStarted
+            case restoring
+            case restored
+            case unavailable
+            case failed
+        }
 
         var currentFolder: CloudFile? {
             folderStack.last
@@ -197,21 +215,26 @@ final class StoragesViewModel {
 
     /// Подключённые провайдеры с данными об использовании —
     /// используется на экранах «Хранилища» и «Все файлы».
+    /// Облако с аккаунтом, но без загруженной квоты (запрос
+    /// usage упал) тоже возвращается — с `usageAvailable == false`:
+    /// иначе подключённое облако исчезало бы из сайдбара и
+    /// списков, хотя аккаунт восстановлен и файлы доступны.
     var connectedStorageProviders: [StorageProvider] {
         connectedProviders.compactMap { kind in
             guard let state = states[kind],
-                  let account = state.account,
-                  let usage = state.storageUsage else {
+                  let account = state.account else {
                 return nil
             }
 
+            let usage = state.storageUsage
             return StorageProvider(
                 provider: kind,
                 name: kind.name,
                 email: account.email,
-                usedStorage: usage.usedGB,
-                totalStorage: usage.totalGB,
-                syncTime: Date()
+                usedStorage: usage?.usedGB ?? 0,
+                totalStorage: usage?.totalGB ?? 0,
+                syncTime: Date(),
+                usageAvailable: usage != nil
             )
         }
     }
@@ -295,24 +318,83 @@ final class StoragesViewModel {
         }
     }
 
+    /// Переигрывает восстановление после QR-импорта токенов:
+    /// у провайдеров без аккаунта сбрасывает `restoreState` и
+    /// запускает `retryFailedRestores`. В отличие от
+    /// `handleUserChange` не трогает плеер, «недавно открытые»
+    /// и активные передачи — меняется только факт наличия
+    /// сохранённых credentials.
+    func reconnectAfterTokenImport() async {
+        for kind in Self.supportedProviders where states[kind]?.account == nil {
+            states[kind]?.restoreState = .notStarted
+        }
+        await retryFailedRestores()
+    }
+
+    /// Повторная попытка восстановления провайдеров, чья прошлая
+    /// попытка завершилась ошибкой (`failed`) или ещё не запускалась
+    /// (`notStarted`). `unavailable` (нет credentials) и `restored`
+    /// не трогаем — иначе были бы бесконечные запросы. В отличие от
+    /// `restoreConnection` не трогает журнал передач —
+    /// `resumePending` вызывается один раз при старте/смене
+    /// пользователя.
+    func retryFailedRestores() async {
+        guard CurrentUserContext.shared.ownerID != nil else { return }
+        let failed = Self.supportedProviders.filter {
+            guard let state = states[$0] else { return false }
+            return (state.restoreState == .failed
+                    || state.restoreState == .notStarted)
+                && state.account == nil
+        }
+        guard !failed.isEmpty else { return }
+        await withTaskGroup(of: Void.self) { group in
+            for kind in failed {
+                group.addTask { [self] in
+                    await self.restoreConnection(for: kind)
+                }
+            }
+        }
+    }
+
     private func restoreConnection(for kind: StorageProviderType) async {
         guard let repository = repositories[kind] else { return }
 
-        guard var state = states[kind], !state.didRestore else { return }
-        state.didRestore = true
-        states[kind] = state
+        // `.restoring` отсекает параллельные вызовы (стартовый
+        // restoreConnection + retry на foreground), `.restored` —
+        // повторную работу, `.unavailable` — провайдеров без
+        // credentials до явного reconnect/token import.
+        guard let state = states[kind],
+              state.restoreState == .notStarted
+                || state.restoreState == .failed else {
+            return
+        }
+        states[kind]?.restoreState = .restoring
 
         do {
             if let restored = try await repository.restoreConnection() {
                 states[kind]?.account = restored
+                states[kind]?.restoreState = .restored
                 await refreshFiles(for: kind)
                 await loadStorageUsage(for: kind)
+            } else {
+                // nil — подтверждённое «нет сессии», а не успех:
+                // фиксируем unavailable, чтобы retry не зациклился.
+                states[kind]?.account = nil
+                states[kind]?.restoreState = .unavailable
             }
         } catch let error as CloudStorageError {
+            // Временный сбой (офлайн на холодном старте, timeout)
+            // не должен навсегда защёлкивать провайдер в
+            // «отключён» — credentials в Keychain целы, поэтому
+            // состояние failed разрешает повтор при следующем
+            // restoreConnection/retry (возврат в foreground,
+            // смена пользователя).
+            states[kind]?.restoreState = .failed
             if case .notConfigured = error {
                 states[kind]?.errorMessage = error.localizedDescription
             }
         } catch {
+            states[kind]?.restoreState = .failed
             states[kind]?.errorMessage = error.localizedDescription
         }
     }
@@ -329,6 +411,7 @@ final class StoragesViewModel {
             guard let repository = repositories[kind] else { return }
             let account = try await repository.connect()
             states[kind]?.account = account
+            states[kind]?.restoreState = .restored
             states[kind]?.folderStack = []
             let files = try await repository.listFiles(parentFolderID: nil)
             states[kind]?.files = files
@@ -346,6 +429,7 @@ final class StoragesViewModel {
             try await repository.signOut()
             fileCache?.clear(provider: kind)
             states[kind]?.account = nil
+            states[kind]?.restoreState = .unavailable
             states[kind]?.files = []
             states[kind]?.folderStack = []
             states[kind]?.storageUsage = nil
@@ -402,6 +486,35 @@ final class StoragesViewModel {
             states[kind]?.files = files
             saveCachedFiles(files, for: kind, parentFolderID: parentID)
         }
+    }
+
+    /// Вызывается после изменений облаков вне VM (Radial Menu):
+    /// инвалидирует кэш листингов, обновляет открытые папки
+    /// и usage затронутых провайдеров, чистит «недавно
+    /// открытые», ссылающиеся на удалённые облачные объекты.
+    func refreshAfterExternalChange(
+        providers: [StorageProviderType],
+        deletedCloudFileIDs: [StorageProviderType: Set<String>] = [:]
+    ) async {
+        var needsPersist = false
+        for (provider, ids) in deletedCloudFileIDs where !ids.isEmpty {
+            let before = recentlyOpenedFiles.count
+            recentlyOpenedFiles.removeAll {
+                $0.provider == provider && ids.contains($0.file.id)
+            }
+            needsPersist = needsPersist
+                || recentlyOpenedFiles.count != before
+        }
+        if needsPersist {
+            persistRecentlyOpenedFiles()
+        }
+
+        for kind in providers {
+            fileCache?.clear(provider: kind)
+            await refreshFiles(for: kind)
+            await loadStorageUsage(for: kind)
+        }
+        publishWidgetData()
     }
 
     func openFolder(_ folder: CloudFile) async {
@@ -466,6 +579,9 @@ final class StoragesViewModel {
             let usage = try await repository.getStorageUsage()
             states[kind]?.storageUsage = usage
         } catch {
+            Self.logger.debug(
+                "getStorageUsage failed for \(kind.rawValue): \(error.localizedDescription)"
+            )
             states[kind]?.storageUsage = nil
         }
 

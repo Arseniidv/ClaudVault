@@ -1,4 +1,5 @@
 import SwiftUI
+import ClaudVaultDomain
 
 struct SynchronizationView: View {
 
@@ -30,7 +31,7 @@ struct SynchronizationView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Color(red: 0.035, green: 0.04, blue: 0.055))
+        .background(AppColors.background)
         .navigationTitle("Синхронизация")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -65,11 +66,11 @@ struct SynchronizationView: View {
 
             Text("Синхронизация")
                 .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text("Состояние передачи и резервного копирования")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -85,11 +86,11 @@ struct SynchronizationView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Состояние системы")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text(viewModel.hasActiveTransfers ? "Идёт передача файлов" : "Нет активных передач")
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
             }
 
             Spacer()
@@ -99,7 +100,7 @@ struct SynchronizationView: View {
                 .frame(width: 9, height: 9)
         }
         .padding(18)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
@@ -146,7 +147,7 @@ struct SynchronizationView: View {
                 HStack {
                     Text("Ошибки передачи")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Spacer()
 
@@ -173,7 +174,7 @@ struct SynchronizationView: View {
             if viewModel.completedTasks.isEmpty {
                 Text("Нет завершённых операций")
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             } else {
@@ -195,7 +196,7 @@ struct SynchronizationView: View {
             HStack {
                 Text("Завершённые операции")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Spacer()
 
@@ -219,7 +220,7 @@ struct SynchronizationView: View {
     private var footer: some View {
         Text("Прогресс отображается по данным реальных сессий загрузки.")
             .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.35))
+            .foregroundStyle(.primary.opacity(0.35))
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
     }

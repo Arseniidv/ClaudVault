@@ -1,6 +1,7 @@
 #if os(macOS)
 import SwiftUI
 import AppKit
+import ClaudVaultDomain
 
 /// Содержимое Menu Bar Extra (.window style): статус, облачные
 /// провайдеры, быстрые действия, последняя активность и футер.
@@ -31,7 +32,6 @@ struct MenuBarView: View {
         .padding(12)
         .frame(width: 320)
         .background(AppColors.background)
-        .preferredColorScheme(.dark)
         .task {
             viewModel.startMonitoring()
             await viewModel.refresh()

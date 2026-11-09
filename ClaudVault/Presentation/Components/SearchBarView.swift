@@ -10,7 +10,7 @@ struct SearchBarView: View {
 
             TextField("Поиск файлов...", text: $searchText)
                 .font(AppTypography.body)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             if !searchText.isEmpty {
                 Button {
@@ -22,13 +22,13 @@ struct SearchBarView: View {
             }
         }
         .padding(AppSpacing.md)
-        .background(Color.white.opacity(0.055))
+        .background(Color.primary.opacity(0.055))
         .clipShape(
             RoundedRectangle(cornerRadius: AppRadius.medium)
         )
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.medium)
-                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 }

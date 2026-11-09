@@ -16,11 +16,11 @@ struct StorageProviderCardView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(provider.name)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Text(provider.email)
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.primary.opacity(0.5))
                 }
 
                 Spacer()
@@ -33,19 +33,24 @@ struct StorageProviderCardView: View {
             VStack(spacing: 9) {
                 HStack {
                     Text("Использовано")
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
 
                     Spacer()
 
-                    Text("\(provider.usedStorage.formatted(.number.precision(.fractionLength(1)))) GB / \(provider.totalStorage.formatted(.number.precision(.fractionLength(0)))) GB")
-                        .foregroundStyle(.white)
+                    if provider.usageAvailable {
+                        Text("\(provider.usedStorage.formatted(.number.precision(.fractionLength(1)))) GB / \(provider.totalStorage.formatted(.number.precision(.fractionLength(0)))) GB")
+                            .foregroundStyle(AppColors.textPrimary)
+                    } else {
+                        Text("—")
+                            .foregroundStyle(.primary.opacity(0.4))
+                    }
                 }
                 .font(.system(size: 12))
 
                 GeometryReader { geometry in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(Color.primary.opacity(0.08))
 
                         Capsule()
                             .fill(provider.tint)
@@ -56,8 +61,13 @@ struct StorageProviderCardView: View {
             }
 
             HStack {
-                Text("\(provider.usagePercentage)% заполнено")
-                    .foregroundStyle(.white.opacity(0.5))
+                if provider.usageAvailable {
+                    Text("\(provider.usagePercentage)% заполнено")
+                        .foregroundStyle(.primary.opacity(0.5))
+                } else {
+                    Text("Загрузка данных о месте…")
+                        .foregroundStyle(.primary.opacity(0.5))
+                }
 
                 Spacer()
 
@@ -65,16 +75,16 @@ struct StorageProviderCardView: View {
                     "Синхр. \(provider.syncTime)",
                     systemImage: "arrow.clockwise"
                 )
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.primary.opacity(0.5))
             }
             .font(.system(size: 11))
         }
         .padding(16)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .overlay {
             RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 }

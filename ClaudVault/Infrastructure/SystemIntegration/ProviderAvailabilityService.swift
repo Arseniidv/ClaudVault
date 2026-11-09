@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import ClaudVaultDomain
 
 /// Определяет, какие облачные провайдеры сейчас подключены.
 ///

@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import ClaudVaultDomain
 
 /// Разделы боковой панели iPad-интерфейса.
 /// Зеркалируют существующие вкладки `AppTab` плюс «Обзор»
@@ -62,7 +63,7 @@ struct IPadRootView: View {
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    Color(red: 0.035, green: 0.047, blue: 0.075)
+                    AppColors.background
                         .ignoresSafeArea()
                 )
         }
@@ -90,7 +91,7 @@ struct IPadRootView: View {
             .padding(.horizontal, AppSpacing.sm)
             .padding(.vertical, AppSpacing.md)
         }
-        .background(Color(red: 0.05, green: 0.06, blue: 0.09))
+        .background(AppColors.background)
         .navigationTitle("CloudVault")
     }
 
@@ -102,7 +103,7 @@ struct IPadRootView: View {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(.primary.opacity(0.45))
                 .padding(.horizontal, AppSpacing.sm)
                 .padding(.top, AppSpacing.sm)
                 .padding(.bottom, 2)
@@ -130,7 +131,7 @@ struct IPadRootView: View {
 
                 Spacer()
             }
-            .foregroundStyle(isSelected ? .white : .white.opacity(0.65))
+            .foregroundStyle(isSelected ? .white : .primary.opacity(0.65))
             .padding(.horizontal, AppSpacing.sm)
             .padding(.vertical, 10)
             .background(

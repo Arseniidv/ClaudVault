@@ -1,5 +1,6 @@
 import Foundation
 import UniformTypeIdentifiers
+import ClaudVaultDomain
 
 final class GoogleDriveRepositoryImpl: CloudStorageRepository {
     private let oauthManager: GoogleOAuthManager

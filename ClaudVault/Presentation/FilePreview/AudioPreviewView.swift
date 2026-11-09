@@ -1,4 +1,5 @@
 import SwiftUI
+import ClaudVaultDomain
 
 /// Встроенный аудиоплеер для предпросмотра MP3/M4A/AAC.
 ///
@@ -58,13 +59,13 @@ struct AudioPreviewView: View {
             VStack(spacing: 6) {
                 Text(displayTitle)
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
 
                 Text(provider.name)
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
             }
             .padding(.horizontal, 24)
 
@@ -87,7 +88,7 @@ struct AudioPreviewView: View {
                     Text(AudioPlayerViewModel.formatTime(displayDuration))
                 }
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.primary.opacity(0.5))
             }
             .padding(.horizontal, 24)
 
@@ -97,7 +98,7 @@ struct AudioPreviewView: View {
                 } label: {
                     Image(systemName: "backward.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!service.hasPreviousTrack)
@@ -121,7 +122,7 @@ struct AudioPreviewView: View {
                 } label: {
                     Image(systemName: "forward.fill")
                         .font(.system(size: 24))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!service.hasNextTrack)
@@ -138,7 +139,7 @@ struct AudioPreviewView: View {
             Spacer()
         }
         .padding(.bottom, 32)
-        .background(Color(red: 0.035, green: 0.045, blue: 0.075).ignoresSafeArea())
+        .background(AppColors.background.ignoresSafeArea())
         .onAppear(perform: startPlaybackIfNeeded)
     }
 

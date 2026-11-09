@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 /// Кэш метаданных облачного файла между запусками.
 /// Хранит последний известный листинг папки провайдера,

@@ -1,5 +1,6 @@
 import SwiftUI
 import OSLog
+import ClaudVaultDomain
 
 /// Маршрут для push-навигации внутри стека «Файлы»:
 /// папка из облака, открытая из результатов поиска.
@@ -33,12 +34,12 @@ struct CloudFolderBrowserView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.035, green: 0.047, blue: 0.075)
+            AppColors.background
                 .ignoresSafeArea()
 
             if isLoading {
                 ProgressView()
-                    .tint(.white)
+                    .tint(AppColors.textPrimary)
             } else if let loadError {
                 ContentUnavailableView(
                     "Не удалось загрузить папку",
@@ -67,10 +68,9 @@ struct CloudFolderBrowserView: View {
         #endif
         #if os(iOS)
         .toolbarBackground(
-            Color(red: 0.035, green: 0.047, blue: 0.075),
+            AppColors.background,
             for: .navigationBar
         )
-        .toolbarColorScheme(.dark, for: .navigationBar)
         #endif
         .navigationDestination(for: CloudFolderRoute.self) { childRoute in
             CloudFolderBrowserView(
@@ -156,19 +156,19 @@ struct CloudFolderBrowserView: View {
                 .font(.system(size: 15))
                 .foregroundStyle(tint)
                 .frame(width: 34, height: 34)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.name)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 if let size = file.sizeBytes {
                     Text(ByteFormatting.string(fromByteCount: size))
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.primary.opacity(0.45))
                 }
             }
 
@@ -208,7 +208,7 @@ struct CloudFolderBrowserView: View {
             } label: {
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .frame(width: 32, height: 32)
                     .contentShape(Rectangle())
             }

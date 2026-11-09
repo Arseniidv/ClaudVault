@@ -2,6 +2,7 @@ import XCTest
 import SwiftData
 import Security
 @testable import ClaudVault
+import ClaudVaultDomain
 
 /// Регрессионные тесты изоляции пользовательских данных:
 /// после выхода пользователя A и входа пользователя B

@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import ClaudVaultDomain
 
 private nonisolated enum KeychainConstants {
     static let service = "com.claudvault.storage.auth"
@@ -21,22 +22,11 @@ enum KeychainStorageError: LocalizedError {
         }
     }
 }
-
-/// Низкоуровневое синхронное Key-Value хранилище поверх `SecItem`.
-///
-/// Используется и `KeychainStorageService` (нормализованные
-/// `CloudAccountSession`-записи), и синхронными адаптерами
-/// облачных SDK (SwiftyDropbox `SecureStorageAccess`), которым
-/// actor-изоляция недоступна. Все операции сериализуются
-/// через `NSLock`; `Security` framework сам по себе потокобезопасен.
 nonisolated enum KeychainItemStore {
-
     private static let lock = NSLock()
-
     static func save(_ data: Data, account: String) throws {
         lock.lock()
         defer { lock.unlock() }
-
         let query = baseQuery(account: account)
         let updateStatus = SecItemUpdate(
             query as CFDictionary,
@@ -46,21 +36,30 @@ nonisolated enum KeychainItemStore {
                     kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             ] as CFDictionary
         )
-
         if updateStatus == errSecSuccess {
             return
         }
-
         guard updateStatus == errSecItemNotFound else {
             throw KeychainStorageError.unexpectedStatus(updateStatus)
         }
-
         var insert = query
         insert[kSecValueData as String] = data
         insert[kSecAttrAccessible as String] =
             kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-
-        let addStatus = SecItemAdd(insert as CFDictionary, nil)
+        var addStatus = SecItemAdd(insert as CFDictionary, nil)
+        if addStatus == errSecDuplicateItem {
+            // Гонка update→add: параллельный writer вставил запись
+            // между нашими вызовами. Один повторный update —
+            // без цикла и без бесконечных retry.
+            addStatus = SecItemUpdate(
+                query as CFDictionary,
+                [
+                    kSecValueData as String: data,
+                    kSecAttrAccessible as String:
+                        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                ] as CFDictionary
+            )
+        }
         guard addStatus == errSecSuccess else {
             throw KeychainStorageError.unexpectedStatus(addStatus)
         }
@@ -82,6 +81,29 @@ nonisolated enum KeychainItemStore {
         return data
     }
 
+    /// Как `load`, но отличает «записи нет» (`nil`) от ошибок
+    /// Keychain (`throw`) — нужна местам, где повреждённая или
+    /// недоступная запись не должна маскироваться под её отсутствие.
+    static func loadResult(account: String) throws -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        var query = baseQuery(account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            return nil
+        }
+        guard status == errSecSuccess,
+              let data = result as? Data else {
+            throw KeychainStorageError.unexpectedStatus(status)
+        }
+        return data
+    }
+
     static func delete(account: String) throws {
         lock.lock()
         defer { lock.unlock() }
@@ -93,6 +115,13 @@ nonisolated enum KeychainItemStore {
     }
 
     static func allData() -> [Data] {
+        (try? allDataResult()) ?? []
+    }
+
+    /// Как `allData`, но отличает «записей нет» (`[]`) от ошибок
+    /// Keychain (`throw`) — нужно критическим путям, где временная
+    /// недоступность хранилища не должна выглядеть как пустой стор.
+    static func allDataResult() throws -> [Data] {
         lock.lock()
         defer { lock.unlock() }
 
@@ -101,14 +130,25 @@ nonisolated enum KeychainItemStore {
         query[kSecMatchLimit as String] = kSecMatchLimitAll
 
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let items = result as? [Data] else {
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
             return []
+        }
+        guard status == errSecSuccess,
+              let items = result as? [Data] else {
+            throw KeychainStorageError.unexpectedStatus(status)
         }
         return items
     }
 
     static func allAccounts() -> [String] {
+        (try? allAccountsResult()) ?? []
+    }
+
+    /// Как `allAccounts`, но пробрасывает ошибки Keychain: иначе
+    /// `errSecInteractionNotAllowed`/другой сбой неотличим от
+    /// отсутствия записей, и cleanup может удалить валидные данные.
+    static func allAccountsResult() throws -> [String] {
         lock.lock()
         defer { lock.unlock() }
 
@@ -117,9 +157,13 @@ nonisolated enum KeychainItemStore {
         query[kSecMatchLimit as String] = kSecMatchLimitAll
 
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let items = result as? [[String: Any]] else {
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
             return []
+        }
+        guard status == errSecSuccess,
+              let items = result as? [[String: Any]] else {
+            throw KeychainStorageError.unexpectedStatus(status)
         }
         return items.compactMap { $0[kSecAttrAccount as String] as? String }
     }
@@ -150,20 +194,6 @@ nonisolated enum KeychainItemStore {
         return query
     }
 }
-
-/// Потокобезопасное хранилище сессий облачных аккаунтов.
-///
-/// Единая точка хранения токенов Google Drive, Dropbox и OneDrive:
-/// все записи — generic-password items в системном Keychain
-/// с сервисом `com.claudvault.storage.auth`, доступностью
-/// `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (не попадает
-/// в бэкапы/миграции) и Data Protection Keychain на macOS.
-///
-/// `CloudAccountSession`-записи — нормализованный индекс
-/// (`<provider>|<email>`). Сырые SDK-токены (например,
-/// `DropboxAccessToken` под ключом `dropbox-sdk|<uid>`)
-/// лежат рядом в том же сервисе, но в `listAllSessions()`
-/// не попадают, т.к. не декодируются в `CloudAccountSession`.
 actor KeychainStorageService {
     private static let shared = KeychainStorageService()
 

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 /// Журнал chunked-передач на собственном фоновом `ModelContext`.
 ///

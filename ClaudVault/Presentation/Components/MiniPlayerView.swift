@@ -1,4 +1,5 @@
 import SwiftUI
+import ClaudVaultDomain
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -78,7 +79,7 @@ struct MiniPlayerView: View {
                                     : "play.fill"
                             )
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.onAccent)
                             .offset(x: service.isPlaying ? 0 : 1.5)
                         }
                     }

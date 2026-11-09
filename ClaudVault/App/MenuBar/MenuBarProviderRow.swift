@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import ClaudVaultDomain
 
 /// Строка облачного провайдера в Menu Bar: иконка, название,
 /// статус подключения, занятое место и состояние операции.

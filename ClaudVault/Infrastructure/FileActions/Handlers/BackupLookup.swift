@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Общий поиск backup-записей для выделенных локальных файлов.
 /// `sourceIdentifier` записи совпадает с `url.path` — то же

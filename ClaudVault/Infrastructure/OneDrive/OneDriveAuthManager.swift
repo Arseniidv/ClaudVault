@@ -2,6 +2,7 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 import Security
+import ClaudVaultDomain
 #if os(iOS)
 import UIKit
 #elseif os(macOS)

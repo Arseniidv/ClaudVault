@@ -1,5 +1,6 @@
 import Foundation
 import LocalAuthentication
+import ClaudVaultDomain
 
 final class BiometricAuthService {
     /// Доступна ли биометрия или пароль устройства для LAContext.

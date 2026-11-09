@@ -1,5 +1,6 @@
 import Foundation
 import UniformTypeIdentifiers
+import ClaudVaultDomain
 
 /// Реализация `CloudStorageRepository` поверх Microsoft Graph API.
 /// В качестве `CloudFile.id` используется driveItem `id` —

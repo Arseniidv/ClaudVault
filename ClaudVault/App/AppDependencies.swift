@@ -1,11 +1,11 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 @MainActor
 struct AppDependencies {
     let modelContainer: ModelContainer
     let fetchBackupRecords: FetchBackupRecordsUseCase
-    let deleteBackupRecord: DeleteBackupRecordUseCase
     let fileAccessRepository: FileAccessRepository
     let fileHasher: FileHashing
     let backupMetadataRepository: BackupMetadataRepository
@@ -85,14 +85,12 @@ struct AppDependencies {
     init(
         modelContainer: ModelContainer,
         fetchBackupRecords: FetchBackupRecordsUseCase,
-        deleteBackupRecord: DeleteBackupRecordUseCase,
         fileAccessRepository: FileAccessRepository,
         fileHasher: FileHashing,
         backupMetadataRepository: BackupMetadataRepository
     ) {
         self.modelContainer = modelContainer
         self.fetchBackupRecords = fetchBackupRecords
-        self.deleteBackupRecord = deleteBackupRecord
         self.fileAccessRepository = fileAccessRepository
         self.fileHasher = fileHasher
         self.backupMetadataRepository = backupMetadataRepository
@@ -189,6 +187,13 @@ struct AppDependencies {
             fileCache: fileCache,
             transferEngine: transferEngine
         )
+
+        // QR-импорт подключений: после записи токенов в Keychain
+        // переигрываем восстановление сессий провайдеров.
+        deviceTransferCoordinator.onConnectionsRestored = {
+            [storagesViewModel] in
+            Task { await storagesViewModel.reconnectAfterTokenImport() }
+        }
 
         // Backup use cases — все облака, чтобы бэкапы
         // можно было создавать и удалять в любом из них.

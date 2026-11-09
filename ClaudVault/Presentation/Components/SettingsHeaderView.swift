@@ -6,15 +6,15 @@ struct SettingsHeaderView: View {
             Text("CLOUDVAULT")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(3)
-                .foregroundStyle(Color(red: 0.48, green: 0.65, blue: 1))
+                .foregroundStyle(AppColors.accent)
 
             Text("Настройки")
                 .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text("Управление приложением и безопасностью")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

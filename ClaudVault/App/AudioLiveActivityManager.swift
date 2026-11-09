@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 #if os(iOS) && canImport(ActivityKit)
 import ActivityKit

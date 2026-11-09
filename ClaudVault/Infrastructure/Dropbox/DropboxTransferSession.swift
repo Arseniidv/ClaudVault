@@ -1,6 +1,7 @@
 import Foundation
 import SwiftyDropbox
 import UniformTypeIdentifiers
+import ClaudVaultDomain
 
 /// Upload-сессия Dropbox как `TransferSession`.
 ///

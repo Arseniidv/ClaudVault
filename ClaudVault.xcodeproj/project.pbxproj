@@ -19,6 +19,9 @@
 		B59F4976309E3123003ED35C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B59F4975309E3123003ED35C /* WidgetKit.framework */; };
 		B59F4978309E3123003ED35C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B59F4977309E3123003ED35C /* SwiftUI.framework */; };
 		B59F4985309E3125003ED35C /* CloudVaultWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B59F4973309E3123003ED35C /* CloudVaultWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B5CBD3C630A22B770068BA32 /* ClaudVaultDomain in Frameworks */ = {isa = PBXBuildFile; productRef = B5DC0A1E0000000000000002 /* ClaudVaultDomain */; };
+		B5CBD3C730A22B770068BA32 /* ClaudVaultDomain in Frameworks */ = {isa = PBXBuildFile; productRef = B5DC0A1E0000000000000002 /* ClaudVaultDomain */; };
+		B5CBD3C830A22B770068BA32 /* ClaudVaultDomain in Frameworks */ = {isa = PBXBuildFile; productRef = B5DC0A1E0000000000000002 /* ClaudVaultDomain */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -159,6 +162,7 @@
 		B520B1833093D28900A2902F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				B5CBD3C630A22B770068BA32 /* ClaudVaultDomain in Frameworks */,
 				B556ECD2309CF59100BFC644 /* GoogleSignIn in Frameworks */,
 				B556ECD3309CF59100BFC644 /* FirebaseFunctions in Frameworks */,
 				B556ECD4309CF59100BFC644 /* Kingfisher in Frameworks */,
@@ -171,6 +175,7 @@
 		B520B1923093D28B00A2902F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				B5CBD3C830A22B770068BA32 /* ClaudVaultDomain in Frameworks */,
 			);
 		};
 		B520B19C3093D28B00A2902F /* Frameworks */ = {
@@ -181,6 +186,7 @@
 		B59F4970309E3123003ED35C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				B5CBD3C730A22B770068BA32 /* ClaudVaultDomain in Frameworks */,
 				B59F4978309E3123003ED35C /* SwiftUI.framework in Frameworks */,
 				B59F4976309E3123003ED35C /* WidgetKit.framework in Frameworks */,
 			);
@@ -278,6 +284,7 @@
 				B50A5834309CE4CE00AA12A8 /* FirebaseFunctions */,
 				B50A5836309CE4CE00AA12A8 /* Kingfisher */,
 				B50A5837309CE4CE00AA12A8 /* FirebaseFirestore */,
+				B5DC0A1E0000000000000002 /* ClaudVaultDomain */,
 			);
 			productName = ClaudVault;
 			productReference = B520B1863093D28900A2902F /* ClaudVault.app */;
@@ -300,6 +307,9 @@
 				B520B1983093D28B00A2902F /* ClaudVaultTests */,
 			);
 			name = ClaudVaultTests;
+			packageProductDependencies = (
+				B5DC0A1E0000000000000002 /* ClaudVaultDomain */,
+			);
 			productName = ClaudVaultTests;
 			productReference = B520B1953093D28B00A2902F /* ClaudVaultTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -340,6 +350,9 @@
 				B5AA11CE0000000000000001 /* Shared */,
 			);
 			name = CloudVaultWidgetExtension;
+			packageProductDependencies = (
+				B5DC0A1E0000000000000002 /* ClaudVaultDomain */,
+			);
 			productName = CloudVaultWidgetExtension;
 			productReference = B59F4973309E3123003ED35C /* CloudVaultWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -387,6 +400,7 @@
 				B556ECCE309CF4FA00BFC644 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				B50A582E309CE4CE00AA12A8 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				B50A5835309CE4CE00AA12A8 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				B5DC0A1E0000000000000001 /* XCLocalSwiftPackageReference "Packages/ClaudVaultDomain" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B520B1873093D28900A2902F /* Products */;
@@ -1040,6 +1054,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		B5DC0A1E0000000000000001 /* XCLocalSwiftPackageReference "Packages/ClaudVaultDomain" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/ClaudVaultDomain;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		B50A582D309CE4CE00AA12A8 /* XCRemoteSwiftPackageReference "SwiftyDropbox" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1110,6 +1131,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B556ECCE309CF4FA00BFC644 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		B5DC0A1E0000000000000002 /* ClaudVaultDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B5DC0A1E0000000000000001 /* XCLocalSwiftPackageReference "Packages/ClaudVaultDomain" */;
+			productName = ClaudVaultDomain;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ClaudVaultDomain
 
 /// Состояние и логика Menu Bar-интерфейса CloudVault (macOS).
 ///

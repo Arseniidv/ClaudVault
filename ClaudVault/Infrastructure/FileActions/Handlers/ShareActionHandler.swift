@@ -1,6 +1,7 @@
 #if os(macOS)
 import Cocoa
 import UniformTypeIdentifiers
+import ClaudVaultDomain
 
 /// Share: системное меню «Поделиться» macOS для локальных файлов.
 /// Для облачных ссылок провайдеры CloudVault share API
@@ -24,7 +25,8 @@ final class ShareActionHandler: FileActionHandling {
     func perform(
         selection: FileSelection,
         context: FileActionContext,
-        provider: StorageProviderType?
+        provider: StorageProviderType?,
+        progressHandler: @escaping (Double) -> Void
     ) async throws -> FileActionOutcome {
         guard !selection.isEmpty else {
             throw CloudStorageError.operationFailed("Нет файлов.")

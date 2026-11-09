@@ -22,7 +22,7 @@ struct PDFPreviewView: View {
             if pageCount > 1 {
                 Text("\(currentPage + 1) / \(pageCount)")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.onAccent)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(.black.opacity(0.55))

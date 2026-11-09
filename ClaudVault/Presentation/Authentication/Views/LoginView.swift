@@ -41,7 +41,7 @@ struct LoginView: View {
                 .padding(24)
             }
             .background(
-                Color(red: 0.035, green: 0.04, blue: 0.055)
+                AppColors.background
                     .ignoresSafeArea()
             )
             .navigationDestination(isPresented: $showRegister) {
@@ -72,11 +72,11 @@ struct LoginView: View {
 
             Text("Вход в аккаунт")
                 .font(.system(size: 26, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text("Войдите, чтобы синхронизировать резервные копии")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
                 .multilineTextAlignment(.center)
         }
     }
@@ -92,13 +92,13 @@ struct LoginView: View {
             HStack(spacing: 10) {
                 if authViewModel.isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.onAccent)
                 } else {
                     Text("Войти")
                         .font(.system(size: 16, weight: .semibold))
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(Color.blue.opacity(0.85))
@@ -110,15 +110,15 @@ struct LoginView: View {
     private var googleSignInDivider: some View {
         HStack(spacing: 12) {
             Rectangle()
-                .fill(Color.white.opacity(0.15))
+                .fill(Color.primary.opacity(0.15))
                 .frame(height: 1)
 
             Text("или")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(.primary.opacity(0.4))
 
             Rectangle()
-                .fill(Color.white.opacity(0.15))
+                .fill(Color.primary.opacity(0.15))
                 .frame(height: 1)
         }
     }
@@ -140,15 +140,15 @@ struct LoginView: View {
 
                 Text("Продолжить с Google")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
-            .background(Color.white.opacity(0.08))
+            .background(Color.primary.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay {
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
@@ -172,7 +172,7 @@ struct LoginView: View {
         VStack(spacing: 6) {
             Text("Ещё нет аккаунта?")
                 .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.primary.opacity(0.5))
 
             Button {
                 authViewModel.clearMessages()
@@ -180,10 +180,10 @@ struct LoginView: View {
             } label: {
                 Text("Создать аккаунт")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Color.white.opacity(0.08))
+                    .background(Color.primary.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)

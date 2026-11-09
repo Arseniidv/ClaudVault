@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import SwiftData
+import ClaudVaultDomain
 
 @MainActor
 final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
@@ -148,11 +149,6 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
     }
     
     // MARK: - Backup Versions
-    
-    func saveVersion(_ version: BackupVersion) throws {
-        // Перенаправляем логику в новый протокольный метод, чтобы не дублировать код
-        try saveVersion(version, for: version.backupRecordID)
-    }
     
     func fetchVersions(for recordID: UUID) throws -> [BackupVersion] {
         guard let ownerID else { return [] }

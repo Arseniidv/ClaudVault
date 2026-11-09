@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Обработчик одного действия Radial Menu.
 ///
@@ -17,9 +18,12 @@ protocol FileActionHandling: AnyObject {
 
     /// Выполняет действие. `provider` передаётся только для
     /// действий с `requiresProvider == true`.
+    /// `progressHandler` получает общий прогресс 0...1 —
+    /// обработчики без длительных операций его игнорируют.
     func perform(
         selection: FileSelection,
         context: FileActionContext,
-        provider: StorageProviderType?
+        provider: StorageProviderType?,
+        progressHandler: @escaping (Double) -> Void
     ) async throws -> FileActionOutcome
 }

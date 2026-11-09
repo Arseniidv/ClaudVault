@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import ClaudVaultDomain
 
 final class SHA256FileHasher: FileHashing {
     

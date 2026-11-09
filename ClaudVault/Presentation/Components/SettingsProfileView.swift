@@ -1,5 +1,6 @@
 
 import SwiftUI
+import ClaudVaultDomain
 
 struct SettingsProfileView: View {
     @ObservedObject var authViewModel: AuthViewModel
@@ -41,11 +42,11 @@ struct SettingsProfileView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(user?.resolvedDisplayName ?? "Локальный профиль")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Text(user?.resolvedEmail ?? "Аккаунт не подключён")
                         .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
 
                 Spacer()
@@ -56,15 +57,15 @@ struct SettingsProfileView: View {
                     .font(.system(size: 20))
                     .foregroundStyle(isConnected
                                      ? .green.opacity(0.9)
-                                     : .white.opacity(0.5))
+                                     : .primary.opacity(0.5))
             }
             .padding(16)
             .contentShape(Rectangle())
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 18))
             .overlay {
                 RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.07), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)

@@ -1,4 +1,5 @@
 import SwiftUI
+import ClaudVaultDomain
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -121,7 +122,7 @@ struct AudioPlayerView: View {
                     )
                     Image(systemName: "music.note")
                         .font(.system(size: 72, weight: .light))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(.primary.opacity(0.85))
                 }
             }
         }
@@ -134,7 +135,7 @@ struct AudioPlayerView: View {
                     .fill(.black.opacity(0.35))
                     .overlay {
                         ProgressView()
-                            .tint(.white)
+                            .tint(AppColors.textPrimary)
                             .scaleEffect(1.4)
                     }
             }
@@ -210,7 +211,7 @@ struct AudioPlayerView: View {
                             : "play.fill"
                     )
                     .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .offset(x: viewModel.isPlaying ? 0 : 3)
                 }
             }
@@ -301,7 +302,7 @@ struct AudioPlayerView: View {
                 .foregroundStyle(AppColors.textSecondary)
             Button("Закрыть") { dismiss() }
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.onAccent)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 10)
                 .background(AppColors.accent)

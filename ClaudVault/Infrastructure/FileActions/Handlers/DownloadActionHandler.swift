@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Download: скачивает последнюю облачную версию каждого файла,
 /// для которого существует backup-запись. Файлы без копий
@@ -30,7 +31,8 @@ final class DownloadActionHandler: FileActionHandling {
     func perform(
         selection: FileSelection,
         context: FileActionContext,
-        provider: StorageProviderType?
+        provider: StorageProviderType?,
+        progressHandler: @escaping (Double) -> Void
     ) async throws -> FileActionOutcome {
         let matches = BackupLookup.matches(
             in: selection,
@@ -42,8 +44,9 @@ final class DownloadActionHandler: FileActionHandling {
 
         var downloaded = 0
         var firstError: Error?
+        let total = max(matches.count, 1)
 
-        for match in matches {
+        for (index, match) in matches.enumerated() {
             try Task.checkCancellation()
             let provider = match.record.storageProvider
             guard let repository = context.repositories[provider] else {
@@ -63,9 +66,12 @@ final class DownloadActionHandler: FileActionHandling {
                 )
                 try await repository.downloadFile(
                     id: version.cloudObjectID,
-                    to: destination,
-                    progressHandler: nil
-                )
+                    to: destination
+                ) { fraction in
+                    let overall = (Double(index) + fraction)
+                        / Double(total)
+                    progressHandler(min(max(overall, 0), 1))
+                }
                 downloaded += 1
             } catch {
                 if firstError == nil { firstError = error }

@@ -23,7 +23,7 @@ struct ProfileView: View {
             .padding(20)
         }
         .background(
-            Color(red: 0.035, green: 0.045, blue: 0.075)
+            AppColors.background
                 .ignoresSafeArea()
         )
         .navigationTitle("Профиль")
@@ -50,11 +50,11 @@ struct ProfileView: View {
             VStack(spacing: 5) {
                 Text(viewModel.displayName)
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text(viewModel.accountEmail)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
             }
 
             Text(viewModel.plan.uppercased() + " PLAN")
@@ -67,7 +67,7 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
@@ -88,7 +88,7 @@ struct ProfileView: View {
                 )
             }
             .padding(16)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 16))  
             if viewModel.isEditing {
                 HStack(spacing: 12) {
@@ -98,7 +98,7 @@ struct ProfileView: View {
                     .disabled(authViewModel.isLoading)
                     .frame(maxWidth: .infinity)
                     .padding(13)
-                    .background(Color.white.opacity(0.08))
+                    .background(Color.primary.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
 
                     Button("Сохранить") {
@@ -143,7 +143,7 @@ struct ProfileView: View {
                 )
 
                 Divider()
-                    .overlay(Color.white.opacity(0.08))
+                    .overlay(Color.primary.opacity(0.08))
 
                 informationRow(
                     title: "Статус аккаунта",
@@ -152,7 +152,7 @@ struct ProfileView: View {
                 )
             }
             .padding(16)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
     }
@@ -171,21 +171,21 @@ struct ProfileView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("CloudVault")
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .font(.system(size: 14, weight: .semibold))
 
                     Text("Управление резервными копиями")
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.primary.opacity(0.5))
                         .font(.system(size: 12))
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(.primary.opacity(0.4))
             }
             .padding(16)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
     }
@@ -195,7 +195,7 @@ struct ProfileView: View {
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.textPrimary)
     }
 
     private func profileField(
@@ -207,12 +207,12 @@ struct ProfileView: View {
 
             Text(title)
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.primary.opacity(0.5))
 
             if isEditable && viewModel.isEditing {
                 TextField(title, text: value)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     #if os(iOS)
                     .textInputAutocapitalization(
                         title == "Имя" ? .words : .never
@@ -222,7 +222,7 @@ struct ProfileView: View {
             } else {
                 Text(value.wrappedValue)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -240,13 +240,13 @@ struct ProfileView: View {
                 .frame(width: 28)
 
             Text(title)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.7))
                 .font(.system(size: 14))
 
             Spacer()
 
             Text(value)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .font(.system(size: 13, weight: .medium))
         }
         .padding(.vertical, 10)

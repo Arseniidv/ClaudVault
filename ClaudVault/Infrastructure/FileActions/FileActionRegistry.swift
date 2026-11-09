@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Реестр обработчиков действий Radial Menu.
 /// Заменяет разросшийся `switch` в UI: действия регистрируются
@@ -39,7 +40,8 @@ final class FileActionRegistry {
         kind: FileActionKind,
         selection: FileSelection,
         context: FileActionContext,
-        provider: StorageProviderType?
+        provider: StorageProviderType?,
+        progressHandler: @escaping (Double) -> Void
     ) async throws -> FileActionOutcome {
         guard let handler = handlers[kind] else {
             throw FileActionError.unknownAction(kind)
@@ -47,7 +49,8 @@ final class FileActionRegistry {
         return try await handler.perform(
             selection: selection,
             context: context,
-            provider: provider
+            provider: provider,
+            progressHandler: progressHandler
         )
     }
 }

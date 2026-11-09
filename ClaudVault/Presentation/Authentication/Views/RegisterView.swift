@@ -50,7 +50,7 @@ struct RegisterView: View {
             .padding(24)
         }
         .background(
-            Color(red: 0.035, green: 0.04, blue: 0.055)
+            AppColors.background
                 .ignoresSafeArea()
         )
         .navigationTitle("Регистрация")
@@ -73,11 +73,11 @@ struct RegisterView: View {
 
             Text("Создание аккаунта")
                 .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text("Регистрация через Firebase Authentication")
                 .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.primary.opacity(0.5))
                 .multilineTextAlignment(.center)
         }
     }
@@ -98,13 +98,13 @@ struct RegisterView: View {
             HStack(spacing: 10) {
                 if authViewModel.isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.onAccent)
                 } else {
                     Text("Зарегистрироваться")
                         .font(.system(size: 16, weight: .semibold))
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(Color.blue.opacity(0.85))

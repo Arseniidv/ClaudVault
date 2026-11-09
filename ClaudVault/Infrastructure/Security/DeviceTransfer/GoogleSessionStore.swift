@@ -1,5 +1,5 @@
 import Foundation
-import Security
+import OSLog
 
 /// Восстановленная Google-сессия (refresh token), полученная
 /// через QR-перенос с другого устройства или экспортированная
@@ -29,78 +29,72 @@ struct GoogleRestoredSession: Codable {
 /// `google-restored|session` (до введения изоляции) владельца
 /// не имеет и удаляется `deleteLegacyItem` — чужую сессию
 /// присваивать нельзя.
+///
+/// Все операции throwing: «записи нет» (`load` → nil) не должна
+/// маскироваться под ошибку доступа или повреждённые данные —
+/// вызывающий код обязан различать эти случаи.
 struct GoogleSessionStore {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "google-session-store"
+    )
 
     private static let accountPrefix = "google-restored|session"
     /// Легаси-ключ до версионирования по ownerID.
     private static let legacyAccount = "google-restored|session"
 
-    func load(ownerID: String) -> GoogleRestoredSession? {
-        guard !ownerID.isEmpty else { return nil }
-        return load(account: Self.account(for: ownerID))
-    }
-
-    func save(_ session: GoogleRestoredSession, ownerID: String) {
-        guard !ownerID.isEmpty,
-              let data = try? JSONEncoder().encode(session) else { return }
-
-        let query = Self.baseQuery(account: Self.account(for: ownerID))
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        ]
-
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if status == errSecItemNotFound {
-            var insert = query
-            insert.merge(attributes) { _, new in new }
-            SecItemAdd(insert as CFDictionary, nil)
+    /// Читает сессию владельца. `nil` — записи нет;
+    /// ошибка Keychain и битый JSON пробрасываются как `throw`,
+    /// запись при этом не удаляется.
+    func load(ownerID: String) throws -> GoogleRestoredSession? {
+        guard !ownerID.isEmpty else {
+            throw KeychainStorageError.missingOwnerID
+        }
+        guard let data = try KeychainItemStore.loadResult(
+            account: Self.account(for: ownerID)
+        ) else {
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(GoogleRestoredSession.self, from: data)
+        } catch {
+            throw KeychainStorageError.invalidStoredSession
         }
     }
 
-    func delete(ownerID: String) {
-        guard !ownerID.isEmpty else { return }
-        let query = Self.baseQuery(account: Self.account(for: ownerID))
-        SecItemDelete(query as CFDictionary)
+    func save(_ session: GoogleRestoredSession, ownerID: String) throws {
+        guard !ownerID.isEmpty else {
+            throw KeychainStorageError.missingOwnerID
+        }
+        let data = try JSONEncoder().encode(session)
+        try KeychainItemStore.save(data, account: Self.account(for: ownerID))
+    }
+
+    /// Удаление идемпотентно: отсутствие записи — не ошибка.
+    func delete(ownerID: String) throws {
+        guard !ownerID.isEmpty else {
+            throw KeychainStorageError.missingOwnerID
+        }
+        try KeychainItemStore.delete(account: Self.account(for: ownerID))
     }
 
     /// Удаляет легаси-ключ `google-restored|session`, оставшийся
     /// от версии без owner-изоляции. Вызывается один раз при входе
     /// пользователя — см. `UserSessionCoordinator`.
     static func deleteLegacyItem() {
-        SecItemDelete(baseQuery(account: legacyAccount) as CFDictionary)
+        do {
+            try KeychainItemStore.delete(account: legacyAccount)
+        } catch {
+            logger.error(
+                "Failed to delete legacy Google session item: \(error.localizedDescription)"
+            )
+        }
     }
 
     // MARK: - Private
 
     private static func account(for ownerID: String) -> String {
         "\(accountPrefix)|\(ownerID)"
-    }
-
-    private func load(account: String) -> GoogleRestoredSession? {
-        var query = Self.baseQuery(account: account)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else {
-            return nil
-        }
-        return try? JSONDecoder().decode(GoogleRestoredSession.self, from: data)
-    }
-
-    private static func baseQuery(account: String) -> [String: Any] {
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.claudvault.storage.auth",
-            kSecAttrAccount as String: account
-        ]
-
-        #if os(macOS)
-        query[kSecUseDataProtectionKeychain as String] = true
-        #endif
-
-        return query
     }
 }

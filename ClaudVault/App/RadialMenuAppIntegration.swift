@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import ClaudVaultDomain
 
 /// Связывает Radial Menu с зависимостями приложения при старте.
 /// Собирает `FileActionContext` из AppDependencies, регистрирует
@@ -42,7 +43,8 @@ enum RadialMenuAppIntegration {
             createBackupWithUpload: dependencies.createBackupWithUpload,
             transferBackupToProvider: dependencies.transferBackupToProvider,
             supportedProviders: StoragesViewModel.supportedProviders,
-            downloadsDirectory: downloadsDirectory
+            downloadsDirectory: downloadsDirectory,
+            storagesViewModel: dependencies.storagesViewModel
         )
 
         let defaults = UserDefaults.standard

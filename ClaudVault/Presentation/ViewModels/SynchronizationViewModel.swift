@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ClaudVaultDomain
 
 /// Преобразует `UploadSession` (SwiftData) в задачи для экрана
 /// «Синхронизация» и периодически обновляет их.

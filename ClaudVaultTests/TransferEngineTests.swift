@@ -1,5 +1,6 @@
 import XCTest
 @testable import ClaudVault
+import ClaudVaultDomain
 
 // MARK: - Mocks
 

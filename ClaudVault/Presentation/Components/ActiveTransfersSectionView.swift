@@ -16,14 +16,14 @@ struct ActiveTransfersSectionView: View {
             HStack {
                 Text("Передаём сейчас")
                     .font(AppTypography.sectionTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Spacer()
             }
 
             Text("Новые копии · не влияют на актуальность облаков")
                 .font(.system(size: 12))
-                .foregroundStyle(Color.white.opacity(0.6))
+                .foregroundStyle(Color.primary.opacity(0.6))
 
             ForEach(activeTasks) { task in
                 SyncTaskCardView(

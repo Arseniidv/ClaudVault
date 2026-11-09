@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ClaudVaultDomain
 
 /// Состояние подготовки предпросмотра облачного файла.
 ///

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 /// Координирует смену пользователя CloudVault: экспортирует
 /// сессии уходящего пользователя, переключает `CurrentUserContext`,
@@ -56,9 +57,20 @@ final class UserSessionCoordinator {
             forKey: FirebaseAuthRepository.pendingEmailLinkKey
         )
 
-        // 3. In-memory сессии SDK previous пользователя сбрасываем:
+        // 3. In-memory сессии SDK предыдущего пользователя сбрасываем:
         //    scoped-записи в Keychain сохраняются.
-        googleOAuthManager.disconnectInMemory()
+        //    ВАЖНО: только при реальном старом владельце. Переход
+        //    nil → user — это восстановление сессии при холодном
+        //    старте: GIDSignIn.currentUser в памяти ещё пуст,
+        //    но signOut() удаляет и Keychain-запись — безусловный
+        //    вызов стирал персистентную Google-сессию при каждом
+        //    запуске, и restorePreviousSignIn ничего не находил.
+        //    Чужая in-memory сессия при входе нового пользователя
+        //    и так отсекается проверками владения
+        //    (currentGIDUserIsOwned / currentClientIsOwned).
+        if oldOwnerID != nil {
+            googleOAuthManager.disconnectInMemory()
+        }
         dropboxAuthManager.clearInMemoryClients()
 
         // 4. Активная передача принадлажаем ушедшему пользователю —
@@ -71,7 +83,10 @@ final class UserSessionCoordinator {
         //    его, т.к. Firebase-сессия ещё не восстановилась).
         if newOwnerID != nil {
             await cleanupLegacyDataIfNeeded()
-            dropboxAuthManager.restoreOwnedClient()
+            // Pre-warm только: реальная ошибка Keychain всплывёт
+            // в StoragesViewModel.restoreConnection как failed,
+            // а не будет замаскирована под «не подключено».
+            try? dropboxAuthManager.restoreOwnedClient()
         }
     }
 

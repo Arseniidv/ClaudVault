@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ClaudVaultDomain
 
 /// Действие создания резервной копии, запрошенное извне
 /// (deep link из виджета).

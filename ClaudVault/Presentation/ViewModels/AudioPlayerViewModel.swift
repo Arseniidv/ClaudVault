@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import ClaudVaultDomain
 
 /// View-model полноэкранного аудиоплеера.
 ///

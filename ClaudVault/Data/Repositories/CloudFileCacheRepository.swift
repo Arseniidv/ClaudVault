@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 /// Кэш листингов облачных папок в SwiftData.
 /// При каждом успешном `listFiles` содержимое папки

@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Resumable-сессия загрузки Google Drive как `TransferSession`.
 ///

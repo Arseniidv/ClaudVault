@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 /// SwiftData-модель журнала chunked-передач.
 /// Хранит смещение и состояние сессии для возобновления

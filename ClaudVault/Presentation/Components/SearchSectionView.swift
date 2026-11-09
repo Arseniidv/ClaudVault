@@ -7,11 +7,11 @@ struct SearchSectionView: View {
         HStack(spacing: AppSpacing.sm) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 20))
-                .foregroundStyle(Color.white.opacity(0.65))
+                .foregroundStyle(Color.primary.opacity(0.65))
 
             TextField("Поиск по всем хранилищам", text: $searchText)
                 .font(AppTypography.body)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             if !searchText.isEmpty {
                 Button {
@@ -23,13 +23,13 @@ struct SearchSectionView: View {
             }
         }
         .padding(AppSpacing.md)
-        .background(Color.white.opacity(0.055))
+        .background(Color.primary.opacity(0.055))
         .clipShape(
             RoundedRectangle(cornerRadius: AppRadius.large)
         )
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.large)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         }
     }
 }

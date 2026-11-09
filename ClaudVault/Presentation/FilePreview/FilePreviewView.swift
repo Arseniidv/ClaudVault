@@ -1,4 +1,5 @@
 import SwiftUI
+import ClaudVaultDomain
 
 /// Главный экран предпросмотра облачного файла.
 /// Открывается по long press на файле; тап по строке сохраняет
@@ -28,7 +29,7 @@ struct FilePreviewView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(red: 0.035, green: 0.047, blue: 0.075)
+                AppColors.background
                     .ignoresSafeArea()
 
                 content
@@ -48,12 +49,12 @@ struct FilePreviewView: View {
                     VStack(spacing: 1) {
                         Text(file.name)
                             .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.textPrimary)
                             .lineLimit(1)
 
                         Text(provider.name)
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(.primary.opacity(0.5))
                     }
                 }
             }
@@ -83,18 +84,18 @@ struct FilePreviewView: View {
     private var loadingView: some View {
         VStack(spacing: 16) {
             ProgressView()
-                .tint(.white)
+                .tint(AppColors.textPrimary)
                 .scaleEffect(1.2)
 
             VStack(spacing: 4) {
                 Text("Подготовка предпросмотра…")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 if let size = file.sizeBytes {
                     Text(ByteFormatting.string(fromByteCount: size))
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.primary.opacity(0.5))
                 }
             }
         }
@@ -111,11 +112,11 @@ struct FilePreviewView: View {
             VStack(spacing: 6) {
                 Text("Не удалось открыть файл")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text(message)
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.primary.opacity(0.55))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             }
@@ -129,7 +130,7 @@ struct FilePreviewView: View {
                     }
                 }
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.onAccent)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 11)
                 .background(Color.blue.opacity(0.8))
@@ -138,10 +139,10 @@ struct FilePreviewView: View {
                 if let url = viewModel.localFileURL {
                     OpenExternallyButton(url: url)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 11)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.primary.opacity(0.1))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
             }

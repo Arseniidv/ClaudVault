@@ -1,5 +1,6 @@
 #if os(iOS)
 import SwiftUI
+import ClaudVaultDomain
 
 /// Инспектор выбранного файла в iPad-разметке.
 /// Показывает доступные метаданные `BackupRecord` и действия.
@@ -27,7 +28,7 @@ struct BackupInspectorView: View {
             }
             .padding(AppSpacing.md)
         }
-        .background(Color(red: 0.035, green: 0.047, blue: 0.075))
+        .background(AppColors.background)
     }
 
     // MARK: - Header
@@ -38,22 +39,22 @@ struct BackupInspectorView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(Color.cyan)
                 .frame(width: 72, height: 72)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: AppRadius.large))
 
             Text(record.fileName)
                 .font(AppTypography.cardTitle)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
 
             Label(record.storageProvider.name,
                   systemImage: record.storageProvider.icon)
                 .font(AppTypography.caption)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.7))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.white.opacity(0.07))
+                .background(Color.primary.opacity(0.07))
                 .clipShape(Capsule())
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -65,26 +66,26 @@ struct BackupInspectorView: View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             Text("Свойства")
                 .font(AppTypography.sectionTitle)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             VStack(spacing: 0) {
                 metadataRow("Тип файла",
                             value: fileExtension.isEmpty
                                 ? "Файл" : fileExtension)
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(Color.primary.opacity(0.08))
                 metadataRow("Провайдер",
                             value: record.storageProvider.name)
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(Color.primary.opacity(0.08))
                 metadataRow("Создана",
                             value: record.createdAt.formatted(
                                 date: .abbreviated, time: .shortened))
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(Color.primary.opacity(0.08))
                 metadataRow("Изменена",
                             value: record.updatedAt.formatted(
                                 date: .abbreviated, time: .shortened))
             }
             .padding(.vertical, AppSpacing.xs)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: AppRadius.medium))
         }
     }
@@ -93,11 +94,11 @@ struct BackupInspectorView: View {
         HStack {
             Text(title)
                 .font(AppTypography.secondary)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
             Spacer()
             Text(value)
                 .font(AppTypography.secondary)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .lineLimit(1)
         }
         .padding(.horizontal, AppSpacing.sm)
@@ -111,7 +112,7 @@ struct BackupInspectorView: View {
             Button(action: onOpen) {
                 Label("Подробнее", systemImage: "doc.text.magnifyingglass")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.onAccent)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(Color.blue)

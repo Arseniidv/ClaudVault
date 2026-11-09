@@ -18,7 +18,7 @@ struct AddBackupButton: View {
     private var buttonLabel: some View {
         Image(systemName: "plus")
             .font(.system(size: 24, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(width: 60, height: 60)
             .background(
                 LinearGradient(

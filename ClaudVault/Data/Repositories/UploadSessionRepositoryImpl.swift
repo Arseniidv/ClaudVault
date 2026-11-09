@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 /// Репозиторий сессий загрузки на собственном фоновом `ModelContext`.
 ///

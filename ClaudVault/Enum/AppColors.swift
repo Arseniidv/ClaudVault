@@ -1,9 +1,62 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 
 // This enum contains all the colors used in the app,
 // making them easy to find and use throughout the project.
+//
+// Цвета адаптированы под системную тему (light/dark):
+// поверхности и текст используют динамические NSColor/UIColor,
+// поэтому экраны корректно отображаются в обеих темах.
 public enum AppColors {
+
+    // MARK: - Adaptive helpers
+
+    #if os(macOS)
+    private typealias PlatformColor = NSColor
+
+    private static func dynamic(
+        light: PlatformColor,
+        dark: PlatformColor
+    ) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua])
+                == .darkAqua ? dark : light
+        })
+    }
+    #else
+    private typealias PlatformColor = UIColor
+
+    private static func dynamic(
+        light: PlatformColor,
+        dark: PlatformColor
+    ) -> Color {
+        Color(uiColor: UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark
+                ? dark : light
+        })
+    }
+    #endif
+
+    private static func rgb(
+        _ red: CGFloat,
+        _ green: CGFloat,
+        _ blue: CGFloat,
+        alpha: CGFloat = 1
+    ) -> PlatformColor {
+        #if os(macOS)
+        NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+        #else
+        UIColor(red: red, green: green, blue: blue, alpha: alpha)
+        #endif
+    }
+
+    // MARK: - Accent
+
     public static let accent = Color(
         red: 0.25,
         green: 0.48,
@@ -17,56 +70,60 @@ public enum AppColors {
     )
 
     static let accentMuted = accent.opacity(0.16)
-    static let background = Color(
-        red: 0.055,
-        green: 0.067,
-        blue: 0.090
+
+    /// Текст/иконки на цветных акцентных фонах — всегда белые.
+    static let onAccent = Color.white
+
+    // MARK: - Surfaces
+
+    static let background = dynamic(
+        light: rgb(0.95, 0.96, 0.98),
+        dark: rgb(0.055, 0.067, 0.090)
     )
 
-    static let surface = Color(
-        red: 0.090,
-        green: 0.105,
-        blue: 0.140
+    static let surface = dynamic(
+        light: rgb(1.00, 1.00, 1.00),
+        dark: rgb(0.090, 0.105, 0.140)
     )
-    static let surfaceSecondary = Color(
-        red: 0.120,
-        green: 0.140,
-        blue: 0.180
+
+    static let surfaceSecondary = dynamic(
+        light: rgb(0.92, 0.93, 0.95),
+        dark: rgb(0.120, 0.140, 0.180)
     )
 
     // MARK: - Text
 
-    static let textPrimary = Color.white
+    /// Основной текст — адаптивный label color
+    /// (белый в dark, почти чёрный в light).
+    static let textPrimary = Color.primary
 
-    static let textSecondary = Color.white.opacity(0.65)
+    static let textSecondary = Color.primary.opacity(0.65)
 
-    static let textMuted = Color.white.opacity(0.40)
+    static let textMuted = Color.primary.opacity(0.45)
 
     // MARK: - Borders
 
-    static let border = Color.white.opacity(0.08)
+    static let border = Color.primary.opacity(0.10)
 
     static let borderFocused = accent.opacity(0.80)
 
     // MARK: - Status
 
-    static let success = Color(
-        red: 0.25,
-        green: 0.78,
-        blue: 0.52
+    static let success = dynamic(
+        light: rgb(0.10, 0.55, 0.30),
+        dark: rgb(0.25, 0.78, 0.52)
     )
 
-    static let warning = Color(
-        red: 1.00,
-        green: 0.72,
-        blue: 0.25
+    static let warning = dynamic(
+        light: rgb(0.75, 0.45, 0.05),
+        dark: rgb(1.00, 0.72, 0.25)
     )
 
-    static let error = Color(
-        red: 1.00,
-        green: 0.34,
-        blue: 0.37
+    static let error = dynamic(
+        light: rgb(0.80, 0.15, 0.18),
+        dark: rgb(1.00, 0.34, 0.37)
     )
+
     static let info = accent
     static let overlay = Color.black.opacity(0.55)
     static let cornerRadius: CGFloat = 18

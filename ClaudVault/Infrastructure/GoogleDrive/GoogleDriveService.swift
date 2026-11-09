@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import ClaudVaultDomain
 
 final class GoogleDriveService {
     private static let logger = Logger(
@@ -790,7 +791,7 @@ final class GoogleDriveService {
         }
     }
     
-    static func isRetryable(_ error: CloudStorageError) -> Bool {
+    nonisolated static func isRetryable(_ error: CloudStorageError) -> Bool {
         switch error {
         case .network, .rateLimited:
             return true
@@ -801,7 +802,7 @@ final class GoogleDriveService {
         }
     }
     
-    static func backoffNanoseconds(attempt: Int) -> UInt64 {
+    nonisolated static func backoffNanoseconds(attempt: Int) -> UInt64 {
         let seconds = min(pow(2.0, Double(max(attempt - 1, 0))), 16)
         return UInt64(seconds * 1_000_000_000)
     }

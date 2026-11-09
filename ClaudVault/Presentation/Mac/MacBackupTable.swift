@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import ClaudVaultDomain
 
 /// Строка таблицы «Файлы» на macOS: запись бэкапа
 /// плюс размер последней версии (для колонки «Размер»).

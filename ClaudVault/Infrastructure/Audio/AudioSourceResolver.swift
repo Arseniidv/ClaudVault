@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import ClaudVaultDomain
 
 /// Разрешённый источник аудио для `AVURLAsset`:
 /// URL + HTTP-заголовки авторизации (Google Drive `alt=media`).

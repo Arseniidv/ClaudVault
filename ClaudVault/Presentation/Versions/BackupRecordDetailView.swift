@@ -1,4 +1,5 @@
 import SwiftUI
+import ClaudVaultDomain
 
 /// Детали резервной копии: список версий, повторный анализ
 /// исходного файла и удаление версии/всей копии.
@@ -25,7 +26,7 @@ struct BackupRecordDetailView: View {
                 }
                 .padding(20)
             }
-            .background(Color(red: 0.035, green: 0.045, blue: 0.075).ignoresSafeArea())
+            .background(AppColors.background.ignoresSafeArea())
             .navigationTitle("Резервная копия")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -34,12 +35,12 @@ struct BackupRecordDetailView: View {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Закрыть") { dismiss() }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                 }
                 #else
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Закрыть") { dismiss() }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                 }
                 #endif
             }
@@ -77,14 +78,13 @@ struct BackupRecordDetailView: View {
             .overlay {
                 if viewModel.isMutating {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.textPrimary)
                         .padding(20)
                         .background(.ultraThinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Record header
@@ -99,12 +99,12 @@ struct BackupRecordDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(viewModel.record.fileName)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(2)
 
                     Text("Обновлено: \(viewModel.record.updatedAt.formatted(date: .abbreviated, time: .shortened))")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
             }
 
@@ -114,23 +114,23 @@ struct BackupRecordDetailView: View {
                     systemImage: viewModel.record.storageProvider.icon
                 )
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.7))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.white.opacity(0.07))
+                .background(Color.primary.opacity(0.07))
                 .clipShape(Capsule())
 
                 Text("Версий: \(viewModel.versions.count)")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.primary.opacity(0.7))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.white.opacity(0.07))
+                    .background(Color.primary.opacity(0.07))
                     .clipShape(Capsule())
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -142,14 +142,14 @@ struct BackupRecordDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Имя файла")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             HStack(spacing: 10) {
                 TextField("Имя файла", text: $renameText)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .padding(12)
-                    .background(Color.white.opacity(0.06))
+                    .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .disabled(viewModel.isMutating)
 
@@ -157,7 +157,7 @@ struct BackupRecordDetailView: View {
                     viewModel.renameRecord(to: renameText)
                 }
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.onAccent)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(Color.blue)
@@ -169,7 +169,7 @@ struct BackupRecordDetailView: View {
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -187,22 +187,22 @@ struct BackupRecordDetailView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Повторить анализ")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Text("Проверить исходный файл и создать версию при изменениях")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
 
                 Spacer()
 
                 if viewModel.isMutating {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.textPrimary)
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(.primary.opacity(0.4))
                 }
             }
             .padding(16)
@@ -229,7 +229,7 @@ struct BackupRecordDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Перенос в другое облако")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 if let progress = viewModel.transferProgress {
                     VStack(alignment: .leading, spacing: 8) {
@@ -237,10 +237,10 @@ struct BackupRecordDetailView: View {
                             .tint(.blue)
                         Text("Перенос… \(Int(progress * 100))%")
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(.primary.opacity(0.6))
                     }
                     .padding(16)
-                    .background(Color.white.opacity(0.045))
+                    .background(Color.primary.opacity(0.045))
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                 } else {
                     ForEach(viewModel.transferTargets) { target in
@@ -275,27 +275,27 @@ struct BackupRecordDetailView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(target.tint)
                     .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.06))
+                    .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(target.name)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Text("Все версии копии → \(target.name)")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
 
                 Spacer()
 
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 16))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
             }
             .padding(16)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .disabled(viewModel.isMutating)
@@ -307,12 +307,12 @@ struct BackupRecordDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Версии")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             if viewModel.versions.isEmpty {
                 Text("Версии пока не загружены.")
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             } else {
@@ -327,19 +327,19 @@ struct BackupRecordDetailView: View {
         HStack(spacing: 12) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 16))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.primary.opacity(0.6))
                 .frame(width: 34, height: 34)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(version.uploadedAt.formatted(date: .abbreviated, time: .shortened))
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text("\(ByteFormatting.string(fromByteCount: version.fileSize)) · SHA-256 \(version.checksum.prefix(8))…")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .lineLimit(1)
             }
 
@@ -360,7 +360,7 @@ struct BackupRecordDetailView: View {
             .accessibilityLabel("Удалить версию")
         }
         .padding(12)
-        .background(Color.white.opacity(0.04))
+        .background(Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 

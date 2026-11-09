@@ -22,7 +22,7 @@ struct DocumentPreviewView: View {
                 QuickLookPreview(url: url)
             }
         }
-        .background(Color(red: 0.035, green: 0.047, blue: 0.075).ignoresSafeArea())
+        .background(AppColors.background.ignoresSafeArea())
     }
 
     private var isPlainTextExtension: Bool {
@@ -36,7 +36,7 @@ struct DocumentPreviewView: View {
             ScrollView {
                 Text(text)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(.primary.opacity(0.9))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
                     .textSelection(.enabled)
@@ -65,14 +65,14 @@ private struct TextPreviewView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(text)
                             .font(.system(size: 13, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.9))
+                            .foregroundStyle(.primary.opacity(0.9))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
 
                         if isTruncated {
                             Text("Показано начало файла (4 МБ).")
                                 .font(.system(size: 11))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .foregroundStyle(.primary.opacity(0.4))
                         }
                     }
                     .padding(16)
@@ -84,7 +84,7 @@ private struct TextPreviewView: View {
                     message: "Файл повреждён или имеет неподдерживаемую кодировку."
                 )
             } else {
-                ProgressView().tint(.white)
+                ProgressView().tint(AppColors.textPrimary)
             }
         }
         .task { await load() }
@@ -127,22 +127,22 @@ struct UnsupportedPreviewView: View {
 
             Image(systemName: "doc.questionmark")
                 .font(.system(size: 56))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(.primary.opacity(0.4))
 
             VStack(spacing: 6) {
                 Text("Предпросмотр недоступен")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text(fileName)
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.primary.opacity(0.55))
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
 
                 Text("Формат этого файла не поддерживается для встроенного просмотра. Его можно открыть в другом приложении.")
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                     .padding(.top, 4)
@@ -150,7 +150,7 @@ struct UnsupportedPreviewView: View {
 
             OpenExternallyButton(url: url)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.onAccent)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
                 .background(Color.blue.opacity(0.8))
@@ -159,7 +159,7 @@ struct UnsupportedPreviewView: View {
             Spacer()
         }
         .padding(.horizontal, 24)
-        .background(Color(red: 0.035, green: 0.047, blue: 0.075).ignoresSafeArea())
+        .background(AppColors.background.ignoresSafeArea())
     }
 }
 
@@ -253,19 +253,19 @@ struct PreviewMessageView: View {
         VStack(spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 48))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(.primary.opacity(0.4))
 
             Text(title)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text(message)
                 .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.035, green: 0.047, blue: 0.075).ignoresSafeArea())
+        .background(AppColors.background.ignoresSafeArea())
     }
 }

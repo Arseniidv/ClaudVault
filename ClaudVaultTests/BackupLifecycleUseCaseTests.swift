@@ -1,6 +1,7 @@
 import XCTest
 import SwiftData
 @testable import ClaudVault
+import ClaudVaultDomain
 
 @MainActor
 final class BackupLifecycleUseCaseTests: XCTestCase {

@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 final class LocalFileAccess: FileAccessRepository {
 

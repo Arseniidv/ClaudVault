@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import ClaudVaultDomain
 #if os(iOS)
 import AVKit
 #else

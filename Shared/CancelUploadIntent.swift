@@ -1,4 +1,5 @@
 import AppIntents
+import ClaudVaultDomain
 import Foundation
 
 /// Кнопка «Отменить» в Live Activity загрузки файла.

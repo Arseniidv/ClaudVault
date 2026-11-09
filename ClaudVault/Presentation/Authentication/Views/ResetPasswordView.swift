@@ -57,7 +57,7 @@ struct ResetPasswordView: View {
             .padding(24)
         }
         .background {
-            Color(red: 0.035, green: 0.04, blue: 0.055)
+            AppColors.background
                 .ignoresSafeArea()
         }
         .navigationTitle("Сброс пароля")
@@ -101,13 +101,13 @@ struct ResetPasswordView: View {
 
             Text("Восстановление доступа")
                 .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text(authViewModel.isResetCodeSent
                  ? "Введите 6-значный код из письма и придумайте новый пароль."
                  : "Мы отправим код для сброса пароля на указанный адрес через Gmail.")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
                 .multilineTextAlignment(.center)
         }
     }
@@ -148,13 +148,13 @@ struct ResetPasswordView: View {
             HStack(spacing: 10) {
                 if authViewModel.isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.onAccent)
                 } else {
                     Text("Отправить код")
                         .font(.system(size: 16, weight: .semibold))
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(Color.blue.opacity(0.85))
@@ -181,13 +181,13 @@ struct ResetPasswordView: View {
             HStack(spacing: 10) {
                 if authViewModel.isLoading {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.onAccent)
                 } else {
                     Text("Сохранить новый пароль")
                         .font(.system(size: 16, weight: .semibold))
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(Color.blue.opacity(0.85))
@@ -241,10 +241,10 @@ struct ResetPasswordView: View {
         } label: {
             Text("Вернуться ко входу")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.7))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)

@@ -1,5 +1,6 @@
 import SwiftUI
 import Kingfisher
+import ClaudVaultDomain
 
 enum CloudThumbnailError: Error {
     case noPreview
@@ -60,7 +61,7 @@ struct CloudThumbnailView: View {
         }
         .frame(width: 44, height: 44)
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .background(Color.white.opacity(0.06))
+        .background(Color.primary.opacity(0.06))
     }
 
     private var thumbnailPlaceholder: some View {

@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import MediaPlayer
+import ClaudVaultDomain
 #if os(iOS)
 import AVFAudio
 #endif

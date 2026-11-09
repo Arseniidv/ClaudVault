@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Зависимости, доступные обработчикам действий.
 /// Собирается один раз при старте приложения из AppDependencies.
@@ -13,4 +14,8 @@ struct FileActionContext {
     let supportedProviders: [StorageProviderType]
     /// ~/Downloads — каталог для скачивания облачных версий.
     let downloadsDirectory: URL
+    /// Общий VM хранилищ: обработчики обновляют списки
+    /// файлов и кэш после операций, меняющих облака
+    /// (загрузка, перенос). nil — в тестах и превью.
+    let storagesViewModel: StoragesViewModel?
 }

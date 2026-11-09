@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ClaudVaultDomain
 
 /// Запрос на переключение раздела приложения извне его окна —
 /// например, из Menu Bar. Аналог `BackupActionRouter`, но для

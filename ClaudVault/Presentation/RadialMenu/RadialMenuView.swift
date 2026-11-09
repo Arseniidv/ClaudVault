@@ -1,6 +1,7 @@
 #if os(macOS)
 import SwiftUI
 import UniformTypeIdentifiers
+import ClaudVaultDomain
 
 /// Radial Menu — плавающее меню быстрых действий над файлами.
 /// Содержимое зависит от `coordinator.mode`: кольцо действий,
@@ -36,12 +37,21 @@ struct RadialMenuView: View {
             }
 
             if coordinator.isWorking {
-                ProgressView()
-                    .controlSize(.large)
-                    .tint(AppColors.accent)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(AppColors.accent)
+                    if let status = coordinator.statusMessage {
+                        Text(status)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(AppColors.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .frame(width: 180)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.ultraThinMaterial)
+                .clipShape(Circle())
             }
 
             // Кнопка добавления файлов к выделению —
@@ -60,7 +70,7 @@ struct RadialMenuView: View {
                                 .frame(width: 30, height: 30)
                                 .background(
                                     Circle()
-                                        .fill(Color.white.opacity(0.06))
+                                        .fill(Color.primary.opacity(0.06))
                                 )
                         }
                         .buttonStyle(.plain)
@@ -122,7 +132,7 @@ struct RadialMenuView: View {
                             .fill(
                                 descriptor.isEnabled
                                     ? AppColors.accentMuted
-                                    : Color.white.opacity(0.05)
+                                    : Color.primary.opacity(0.05)
                             )
                     )
                     .overlay(
@@ -269,7 +279,7 @@ struct RadialMenuView: View {
             HStack(spacing: 12) {
                 Image(systemName: provider.icon)
                     .font(.system(size: 18))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.onAccent)
                     .frame(width: 36, height: 36)
                     .background(Circle().fill(provider.tint))
                 Text(provider.name)
@@ -284,7 +294,7 @@ struct RadialMenuView: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.white.opacity(0.05))
+                    .fill(Color.primary.opacity(0.05))
             )
         }
         .buttonStyle(.plain)
@@ -351,7 +361,7 @@ struct RadialMenuView: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.05))
+                .fill(Color.primary.opacity(0.05))
         )
     }
 
@@ -409,7 +419,7 @@ struct RadialMenuView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppColors.textSecondary)
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(Color.white.opacity(0.06)))
+                    .background(Circle().fill(Color.primary.opacity(0.06)))
             }
             .buttonStyle(.plain)
 
@@ -426,7 +436,7 @@ struct RadialMenuView: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(AppColors.textSecondary)
                     .frame(width: 24, height: 24)
-                    .background(Circle().fill(Color.white.opacity(0.06)))
+                    .background(Circle().fill(Color.primary.opacity(0.06)))
             }
             .buttonStyle(.plain)
         }

@@ -1,16 +1,15 @@
-
 import SwiftUI
+import ClaudVaultDomain
 
 struct StorageProvider: Identifiable {
     let id: UUID
     let provider: StorageProviderType
     let name: String
     let email: String
-
     let usedStorage: Double
     let totalStorage: Double
-
     let syncTime: Date
+    let usageAvailable: Bool
 
     init(
         id: UUID = UUID(),
@@ -19,7 +18,8 @@ struct StorageProvider: Identifiable {
         email: String,
         usedStorage: Double,
         totalStorage: Double,
-        syncTime: Date
+        syncTime: Date,
+        usageAvailable: Bool = true
     ) {
         self.id = id
         self.provider = provider
@@ -28,6 +28,7 @@ struct StorageProvider: Identifiable {
         self.usedStorage = usedStorage
         self.totalStorage = totalStorage
         self.syncTime = syncTime
+        self.usageAvailable = usageAvailable
     }
 
     var icon: String {
@@ -49,40 +50,7 @@ struct StorageProvider: Identifiable {
     }
 }
 
-enum StorageProviderType: String, CaseIterable, Identifiable, Codable {
-    case local
-    case oneDrive
-    case iCloud
-    case googleDrive
-    case dropbox
-    case unknown
-
-    var id: String {
-        rawValue
-    }
-
-    var name: String {
-        switch self {
-        case .local: return "Локальное хранилище"
-        case .oneDrive: return "OneDrive"
-        case .iCloud: return "iCloud Drive"
-        case .googleDrive: return "Google Drive"
-        case .dropbox: return "Dropbox"
-        case .unknown: return "Неизвестный источник"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .local: return "folder"
-        case .oneDrive: return "cloud"
-        case .iCloud: return "icloud"
-        case .googleDrive: return "externaldrive"
-        case .dropbox: return "shippingbox"
-        case .unknown: return "questionmark.folder"
-        }
-    }
-
+extension StorageProviderType {
     var tint: Color {
         ProviderPalette.color(for: rawValue)
     }

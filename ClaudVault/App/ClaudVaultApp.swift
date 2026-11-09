@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import FirebaseCore
 import SwiftyDropbox
+import ClaudVaultDomain
 
 @main
 @MainActor
@@ -111,9 +112,6 @@ struct ClaudVaultApp: App {
         return AppDependencies(
             modelContainer: container,
             fetchBackupRecords: FetchBackupRecordsUseCase(
-                repository: repository
-            ),
-            deleteBackupRecord: DeleteBackupRecordUseCase(
                 repository: repository
             ),
             fileAccessRepository: fileAccessRepository,
