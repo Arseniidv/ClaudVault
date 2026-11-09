@@ -8,13 +8,13 @@ struct CompletedTransfersView: View {
             HStack {
                 Text("Завершено")
                     .font(AppTypography.sectionTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Spacer()
 
                 Text("Сегодня")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color.white.opacity(0.6))
+                    .foregroundStyle(Color.primary.opacity(0.6))
             }
 
             VStack(spacing: AppSpacing.md) {
@@ -27,29 +27,29 @@ struct CompletedTransfersView: View {
                         VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                             Text(task.fileName)
                                 .font(.system(size: 15))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(AppColors.textPrimary)
 
                             Text("\(task.source) · \(task.totalSize) МБ")
                                 .font(.system(size: 12))
-                                .foregroundStyle(Color.white.opacity(0.6))
+                                .foregroundStyle(Color.primary.opacity(0.6))
                         }
 
                         Spacer()
 
                         Text(task.remainingTime)
                             .font(.system(size: 11, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.6))
+                            .foregroundStyle(Color.primary.opacity(0.6))
                     }
                 }
             }
             .padding(AppSpacing.md)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(
                 RoundedRectangle(cornerRadius: AppRadius.extraLarge)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: AppRadius.extraLarge)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             }
         }
     }

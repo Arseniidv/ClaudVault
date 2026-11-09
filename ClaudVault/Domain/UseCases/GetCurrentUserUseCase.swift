@@ -1,16 +1,16 @@
 import Foundation
 
-struct GetCurrentUserUseCase{
+public struct GetCurrentUserUseCase{
     private let repository:AuthRepository
     
-    init(repository: AuthRepository) {
+    public init(repository: AuthRepository) {
         self.repository = repository
     }
     
-    func execute()  async  -> AuthUser? {
+    public func execute()  async  -> AuthUser? {
         await repository.getCurrentUser()
     }
-    func observeAuthState()->AsyncStream<AuthUser?>{
+    public func observeAuthState()->AsyncStream<AuthUser?>{
         repository.authStateChanges()
     }
 }

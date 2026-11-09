@@ -15,9 +15,9 @@ struct OTPCodeField: View {
             #endif
             .multilineTextAlignment(.center)
             .font(.system(size: 28, weight: .bold, design: .monospaced))
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.textPrimary)
             .padding()
-            .background(Color.white.opacity(0.06))
+            .background(Color.primary.opacity(0.06))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .focused($isFocused)
             .onChange(of: code) { _, newValue in

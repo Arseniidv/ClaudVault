@@ -6,15 +6,15 @@ struct SettingsFooterView: View {
             Text("CLOUDVAULT")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(2)
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(.primary.opacity(0.4))
 
             Text("Версия 1.0.0")
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.35))
+                .foregroundStyle(.primary.opacity(0.35))
 
             Text("Резервное копирование с контролем целостности")
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.3))
+                .foregroundStyle(.primary.opacity(0.3))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)

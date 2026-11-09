@@ -77,7 +77,7 @@ struct FilterSelectorView: View {
             .overlay {
                 Capsule()
                     .stroke(
-                        isSelected ? Color.clear : Color.white.opacity(0.15),
+                        isSelected ? Color.clear : Color.primary.opacity(0.15),
                         lineWidth: 1
                     )
             }
@@ -88,5 +88,5 @@ struct FilterSelectorView: View {
 
 #Preview {
     FilterSelectorView(selectedProvider: .constant(nil))
-        .background(Color(red: 0.035, green: 0.047, blue: 0.075))
+        .background(AppColors.background)
 }

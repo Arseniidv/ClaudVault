@@ -2,15 +2,15 @@
 import Foundation
 
 @MainActor
-struct FetchBackupVersionsUseCase {
+public struct FetchBackupVersionsUseCase {
 
     private let repository: BackupMetadataRepository
 
-    init(repository: BackupMetadataRepository) {
+    public init(repository: BackupMetadataRepository) {
         self.repository = repository
     }
 
-    func execute(for recordID: UUID) throws -> [BackupVersion] {
+    public func execute(for recordID: UUID) throws -> [BackupVersion] {
         try repository.fetchVersions(for: recordID)
     }
 }

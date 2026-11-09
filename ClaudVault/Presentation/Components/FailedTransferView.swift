@@ -16,7 +16,7 @@ struct FailedTransferView: View {
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(fileName)
                     .font(.system(size: 15))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text(errorDescription)
                     .font(.system(size: 12))
@@ -29,7 +29,7 @@ struct FailedTransferView: View {
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Удалить из истории")

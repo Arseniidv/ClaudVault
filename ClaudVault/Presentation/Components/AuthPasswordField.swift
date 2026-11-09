@@ -26,12 +26,12 @@ struct AuthPasswordField: View {
 
             Text(title)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(.primary.opacity(0.75))
 
             HStack(spacing: 12) {
                 Image(systemName: "lock")
                     .font(.system(size: 17))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.primary.opacity(0.55))
                     .frame(width: 22)
 
                 Group {
@@ -42,7 +42,7 @@ struct AuthPasswordField: View {
                     }
                 }
                 .font(.system(size: 15))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .autocorrectionDisabled()
                 #if canImport(UIKit)
                 .textContentType(textContentType)
@@ -54,7 +54,7 @@ struct AuthPasswordField: View {
                 } label: {
                     Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
                         .font(.system(size: 16))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(
@@ -65,11 +65,11 @@ struct AuthPasswordField: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 56)
-            .background(Color.white.opacity(0.055))
+            .background(Color.primary.opacity(0.055))
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             }
         }
     }

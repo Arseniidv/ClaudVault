@@ -1,27 +1,27 @@
 
 import Foundation
 
-struct BackupRecord: Identifiable, Equatable, Codable {
+public struct BackupRecord: Identifiable, Equatable, Codable {
 
-    let id: UUID
+    public let id: UUID
 
-    var fileName: String
-    var sourceIdentifier: String
+    public var fileName: String
+    public var sourceIdentifier: String
 
-    let createdAt: Date
-    var updatedAt: Date
+    public let createdAt: Date
+    public var updatedAt: Date
 
-    var input: String
-    var storageProvider: StorageProviderType
+    public var input: String
+    public var storageProvider: StorageProviderType
 
     /// Путь к исходному файлу на диске (для отображения).
-    var localFilePath: String?
+    public var localFilePath: String?
 
     /// Security-scoped bookmark (base64) исходного файла —
     /// позволяет повторно получить доступ к файлу после перезапуска.
-    var localFileBookmark: String?
+    public var localFileBookmark: String?
 
-    init(
+    public init(
         id: UUID = UUID(),
         input: String = "",
         fileName: String,

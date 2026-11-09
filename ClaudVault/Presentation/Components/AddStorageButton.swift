@@ -12,16 +12,16 @@ struct AddStorageButton: View {
 
                 Text("Добавить хранилище")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 68)
-            .background(Color.white.opacity(0.015))
+            .background(Color.primary.opacity(0.015))
             .clipShape(Capsule())
             .overlay {
                 Capsule()
                     .stroke(
-                        Color.white.opacity(0.2),
+                        Color.primary.opacity(0.2),
                         style: StrokeStyle(lineWidth: 1, dash: [7, 6])
                     )
             }
