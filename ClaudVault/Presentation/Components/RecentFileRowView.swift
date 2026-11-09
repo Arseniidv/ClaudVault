@@ -30,7 +30,7 @@ struct RecentFileRowView: View {
                 .font(.system(size: 22))
                 .foregroundStyle(Color.cyan)
                 .frame(width: 48, height: 48)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(
                     RoundedRectangle(cornerRadius: AppRadius.medium)
                 )
@@ -38,7 +38,7 @@ struct RecentFileRowView: View {
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(record.fileName)
                     .font(AppTypography.bodyMedium)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 Text(record.updatedAt.formatted(
@@ -46,7 +46,7 @@ struct RecentFileRowView: View {
                     time: .shortened
                 ))
                 .font(AppTypography.caption)
-                .foregroundStyle(Color.white.opacity(0.6))
+                .foregroundStyle(Color.primary.opacity(0.6))
             }
 
             Spacer()
@@ -56,13 +56,13 @@ struct RecentFileRowView: View {
                 .foregroundStyle(Color.green)
         }
         .padding(AppSpacing.sm)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(
             RoundedRectangle(cornerRadius: AppRadius.large)
         )
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.large)
-                .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 }
