@@ -167,6 +167,53 @@ final class GoogleDriveRepositoryImpl: CloudStorageRepository {
         )
     }
 
+    /// Resumable-сессия Google Drive для TransferEngine.
+    /// Состояние — URL сессии; при протухании возвращает nil,
+    /// движок повторит с `resumeState: nil`.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        if let resumeState, !resumeState.isEmpty {
+            guard let session = try await GoogleTransferSession.restore(
+                service: driveService,
+                resumeState: resumeState,
+                sizeBytes: sizeBytes,
+                mimeType: mimeType
+            ) else {
+                return nil
+            }
+            return (session, session.stateValue)
+        }
+
+        let session = try await GoogleTransferSession.begin(
+            service: driveService,
+            name: name,
+            mimeType: mimeType,
+            parentFolderID: parentFolderID,
+            sizeBytes: sizeBytes
+        )
+        return (session, session.stateValue)
+    }
+
+    /// Range-источник `alt=media` с обновлением Bearer-токена
+    /// перед каждой попыткой — длинные передачи не упираются
+    /// в часовую жизнь access token.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)? {
+        guard let sizeBytes = file.sizeBytes, sizeBytes >= 0,
+              let url = driveService.mediaDownloadURL(for: file) else {
+            return nil
+        }
+        return HTTPRangeChunkSource(
+            url: url,
+            totalSize: sizeBytes,
+            headersProvider: driveService.chunkSourceHeadersProvider()
+        )
+    }
+
     func searchFiles(query: String) async throws -> [CloudFile] {
         try await driveService.searchFiles(query: query)
     }

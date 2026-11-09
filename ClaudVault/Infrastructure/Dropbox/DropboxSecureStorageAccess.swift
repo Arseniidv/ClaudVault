@@ -16,6 +16,11 @@ import SwiftyDropbox
 nonisolated final class DropboxSecureStorageAccess: SecureStorageAccess {
 
     private static let accountPrefix = "dropbox-sdk|"
+    /// Карта владения: `dropbox-owner|<uid>` → ownerID пользователя
+    /// CloudVault. SDK хранит токены по Dropbox UID без привязки
+    /// к аккаунту приложения, поэтому принадлежность учитываем
+    /// отдельными ключами в том же Keychain-сервисе.
+    private static let ownerPrefix = "dropbox-owner|"
     private static let legacyServiceSuffix = "dropbox.authv2"
     private static let migrationFlagKey = "DropboxKeychainMigrationV1"
 
@@ -41,13 +46,87 @@ nonisolated final class DropboxSecureStorageAccess: SecureStorageAccess {
         }
     }
 
+    /// UID'ы Dropbox-аккаунтов, принадлежащих текущему
+    /// пользователю CloudVault. Токены без записи о владельце
+    /// (сохранённые до введения изоляции) не возвращаются —
+    /// их удаляет `deleteOrphanedTokens` при первом входе.
     func getAllUserIds() -> [String] {
-        KeychainItemStore.allAccounts()
-            .filter { $0.hasPrefix(Self.accountPrefix) }
-            .map { String($0.dropFirst(Self.accountPrefix.count)) }
+        ownedUserIds()
     }
 
+    /// UID'ы токенов, принадлежащих текущему пользователю.
+    /// Без активного пользователя возвращает пустой список —
+    /// SDK не должен восстанавливать чужую сессию.
+    func ownedUserIds() -> [String] {
+        guard let ownerID = CurrentUserContext.shared.ownerID,
+              !ownerID.isEmpty else {
+            return []
+        }
+        return KeychainItemStore.allAccounts()
+            .filter { $0.hasPrefix(Self.accountPrefix) }
+            .map { String($0.dropFirst(Self.accountPrefix.count)) }
+            .filter { owner(ofDropboxUID: $0) == ownerID }
+    }
+
+    /// Записывает владельца Dropbox-токена. Вызывается после
+    /// успешного connect/restore, когда известен и Dropbox UID,
+    /// и текущий пользователь CloudVault.
+    func setOwner(_ appOwnerID: String, forDropboxUID uid: String) {
+        guard !appOwnerID.isEmpty else { return }
+        try? KeychainItemStore.save(
+            Data(appOwnerID.utf8),
+            account: Self.ownerAccount(for: uid)
+        )
+    }
+
+    /// Владелец Dropbox-токена; nil — токен «бесхозный»
+    /// (записан до введения изоляции).
+    func owner(ofDropboxUID uid: String) -> String? {
+        guard let data = KeychainItemStore.load(
+            account: Self.ownerAccount(for: uid)
+        ) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Удаляет Dropbox-токены без записи о владельце — наследие
+    /// версии до owner-изоляции. Вызывается один раз при входе
+    /// пользователя — см. `UserSessionCoordinator`.
+    static func deleteOrphanedTokens() {
+        let access = DropboxSecureStorageAccess()
+        for account in KeychainItemStore.allAccounts()
+        where account.hasPrefix(accountPrefix) {
+            let uid = String(account.dropFirst(accountPrefix.count))
+            if access.owner(ofDropboxUID: uid) == nil {
+                try? KeychainItemStore.delete(account: account)
+            }
+        }
+        // Карты владельцев без соответствующих токенов тоже чистим.
+        for account in KeychainItemStore.allAccounts()
+        where account.hasPrefix(ownerPrefix) {
+            let uid = String(account.dropFirst(ownerPrefix.count))
+            let tokenAccount = "\(accountPrefix)\(uid)"
+            if KeychainItemStore.load(account: tokenAccount) == nil {
+                try? KeychainItemStore.delete(account: account)
+            }
+        }
+    }
+
+    private static func ownerAccount(for uid: String) -> String {
+        "\(ownerPrefix)\(uid)"
+    }
+
+    /// Defense-in-depth: даже если SDK запросит токен по UID
+    /// напрямую (минуя `getAllUserIds`), «бесхозные» и чужие
+    /// токены не отдаются — владелец обязан совпадать с
+    /// текущим пользователем CloudVault.
     func getDropboxAccessToken(for key: String) -> DropboxAccessToken? {
+        guard let ownerID = CurrentUserContext.shared.ownerID,
+              !ownerID.isEmpty,
+              owner(ofDropboxUID: key) == ownerID else {
+            return nil
+        }
         guard let data = KeychainItemStore.load(
             account: Self.account(for: key)
         ) else {
@@ -71,6 +150,9 @@ nonisolated final class DropboxSecureStorageAccess: SecureStorageAccess {
     func deleteInfo(for key: String) -> Bool {
         do {
             try KeychainItemStore.delete(account: Self.account(for: key))
+            try? KeychainItemStore.delete(
+                account: Self.ownerAccount(for: key)
+            )
             return true
         } catch {
             return false

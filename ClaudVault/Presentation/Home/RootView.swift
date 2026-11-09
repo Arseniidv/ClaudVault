@@ -129,6 +129,7 @@ struct RootView: View {
                 createBackupWithUpload: dependencies.createBackupWithUpload,
                 deleteBackupUseCase: dependencies.deleteBackup,
                 reparseAndBackupUseCase: dependencies.reparseAndBackup,
+                transferBackupToProvider: dependencies.transferBackupToProvider,
                 fetchBackupVersions: dependencies.fetchBackupVersions,
                 actionRouter: backupActionRouter
             )
