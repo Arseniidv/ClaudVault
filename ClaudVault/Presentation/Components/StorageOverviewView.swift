@@ -30,11 +30,11 @@ struct StorageOverviewView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Использовано облачного хранилища")
                         .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.primary.opacity(0.75))
 
                     Text("\(usedStorage, specifier: "%.1f") GB")
                         .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                 }
 
                 Spacer()
@@ -62,7 +62,7 @@ struct StorageOverviewView: View {
                         ? max(totalStorage - usedStorage, 0) / totalStorage : 1
 
                     Rectangle()
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Color.primary.opacity(0.06))
                         .frame(width: geometry.size.width * CGFloat(freeFraction))
                 }
             }
@@ -81,7 +81,7 @@ struct StorageOverviewView: View {
                 }
             }
             .font(.system(size: 12))
-            .foregroundStyle(.white.opacity(0.6))
+            .foregroundStyle(.primary.opacity(0.75))
 
             HStack {
                 Text("Занято: \(usedStorage, specifier: "%.1f") GB")
@@ -91,15 +91,15 @@ struct StorageOverviewView: View {
                 Text("Всего: \(totalStorage, specifier: "%.1f") GB")
             }
             .font(.system(size: 12))
-            .foregroundStyle(.white.opacity(0.6))
+            .foregroundStyle(.primary.opacity(0.75))
 
             Divider()
-                .background(Color.white.opacity(0.08))
+                .background(Color.primary.opacity(0.08))
 
             statsRow
         }
         .padding(18)
-        .background(Color.white.opacity(0.04))
+        .background(Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
@@ -109,14 +109,14 @@ struct StorageOverviewView: View {
             if let backupVersionsBytes {
                 statItem(
                     title: "Резервные версии",
-                    value: Self.byteFormatter.string(fromByteCount: backupVersionsBytes)
+                    value: ByteFormatting.string(fromByteCount: backupVersionsBytes)
                 )
             }
 
             if let localFilesBytes, let localFilesCount {
                 statItem(
                     title: "Локальные файлы (\(localFilesCount))",
-                    value: Self.byteFormatter.string(fromByteCount: localFilesBytes)
+                    value: ByteFormatting.string(fromByteCount: localFilesBytes)
                 )
             }
         }
@@ -126,16 +126,10 @@ struct StorageOverviewView: View {
     private func statItem(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.7))
             Text(value)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
         }
     }
-
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 }

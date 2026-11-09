@@ -28,15 +28,17 @@ struct CloudFolderBrowserView: View {
     @State private var previewFileURL: URL?
     @State private var isDownloadingPreview = false
     @State private var errorMessage: String?
+    /// Файл, открытый в типизированном предпросмотре по long press.
+    @State private var previewItem: FilePreviewItem?
 
     var body: some View {
         ZStack {
-            Color(red: 0.035, green: 0.047, blue: 0.075)
+            AppColors.background
                 .ignoresSafeArea()
 
             if isLoading {
                 ProgressView()
-                    .tint(.white)
+                    .tint(AppColors.textPrimary)
             } else if let loadError {
                 ContentUnavailableView(
                     "Не удалось загрузить папку",
@@ -65,10 +67,9 @@ struct CloudFolderBrowserView: View {
         #endif
         #if os(iOS)
         .toolbarBackground(
-            Color(red: 0.035, green: 0.047, blue: 0.075),
+            AppColors.background,
             for: .navigationBar
         )
-        .toolbarColorScheme(.dark, for: .navigationBar)
         #endif
         .navigationDestination(for: CloudFolderRoute.self) { childRoute in
             CloudFolderBrowserView(
@@ -96,6 +97,9 @@ struct CloudFolderBrowserView: View {
             if let url = previewFileURL {
                 QuickLookPreview(url: url)
             }
+        }
+        .sheet(item: $previewItem) { item in
+            FilePreviewView(item: item, storagesViewModel: storagesViewModel)
         }
         .alert(
             "Ошибка",
@@ -131,6 +135,14 @@ struct CloudFolderBrowserView: View {
                     fileRowContent(file, icon: "doc.fill", tint: provider.tint)
                 }
                 .buttonStyle(.plain)
+                // Long press — типизированный предпросмотр (PDF/AV/QL).
+                // Тап сохраняет прежнее поведение (QuickLook).
+                .onLongPressGesture(minimumDuration: 0.5) {
+                    previewItem = FilePreviewItem(
+                        provider: provider,
+                        file: file
+                    )
+                }
 
                 transferMenu(for: file)
             }
@@ -143,19 +155,19 @@ struct CloudFolderBrowserView: View {
                 .font(.system(size: 15))
                 .foregroundStyle(tint)
                 .frame(width: 34, height: 34)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.name)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 if let size = file.sizeBytes {
-                    Text(Self.byteFormatter.string(fromByteCount: size))
+                    Text(ByteFormatting.string(fromByteCount: size))
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.primary.opacity(0.45))
                 }
             }
 
@@ -195,7 +207,7 @@ struct CloudFolderBrowserView: View {
             } label: {
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .frame(width: 32, height: 32)
                     .contentShape(Rectangle())
             }
@@ -235,10 +247,4 @@ struct CloudFolderBrowserView: View {
             errorMessage = error.localizedDescription
         }
     }
-
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 }

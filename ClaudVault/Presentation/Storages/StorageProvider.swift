@@ -11,6 +11,7 @@ struct StorageProvider: Identifiable {
     let totalStorage: Double
 
     let syncTime: Date
+    let usageAvailable: Bool
 
     init(
         id: UUID = UUID(),
@@ -19,7 +20,8 @@ struct StorageProvider: Identifiable {
         email: String,
         usedStorage: Double,
         totalStorage: Double,
-        syncTime: Date
+        syncTime: Date,
+        usageAvailable: Bool = true
     ) {
         self.id = id
         self.provider = provider
@@ -28,6 +30,7 @@ struct StorageProvider: Identifiable {
         self.usedStorage = usedStorage
         self.totalStorage = totalStorage
         self.syncTime = syncTime
+        self.usageAvailable = usageAvailable
     }
 
     var icon: String {

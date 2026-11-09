@@ -9,6 +9,8 @@ struct StoragesView: View {
     @State private var showingCreateFolder = false
     @State private var newFolderName = ""
     @State private var pendingTransferFile: CloudFile?
+    /// Файл, открытый в типизированном предпросмотре по long press.
+    @State private var previewItem: FilePreviewItem?
 
     private var providers: [StorageProvider] {
         viewModel.connectedStorageProviders
@@ -35,13 +37,28 @@ struct StoragesView: View {
             .padding(.top, 20)
             .padding(.bottom, 32)
         }
-        .background(Color(red: 0.035, green: 0.04, blue: 0.055))
+        .background(AppColors.background)
         .navigationTitle("Хранилища")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .sheet(isPresented: $showingAddStorage) {
             addStorageSheet
+        }
+        // Запрос «Добавить облако» из меню «+» экрана «Файлы»:
+        // открываем шит подключения с уже выбранным провайдером.
+        .onChange(of: viewModel.pendingConnectProvider) { _, provider in
+            guard let provider else { return }
+            viewModel.selectedProvider = provider
+            showingAddStorage = true
+            viewModel.consumeConnectRequest()
+        }
+        .task {
+            if let provider = viewModel.pendingConnectProvider {
+                viewModel.selectedProvider = provider
+                showingAddStorage = true
+                viewModel.consumeConnectRequest()
+            }
         }
         .sheet(isPresented: Binding(
             get: { viewModel.otpChallengeProvider != nil },
@@ -66,18 +83,18 @@ struct StoragesView: View {
 
                 Text("Подтверждение кодом")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text("Для подключения нового хранилища введите 6-значный код, отправленный на вашу почту.")
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.primary.opacity(0.6))
 
                 if viewModel.isOTPRequestRunning {
                     HStack(spacing: 10) {
                         ProgressView().tint(.cyan)
                         Text("Отправляем код…")
                             .font(.system(size: 14))
-                            .foregroundStyle(.white.opacity(0.6))
+                            .foregroundStyle(.primary.opacity(0.6))
                     }
                 } else {
                     OTPCodeField { code in
@@ -109,14 +126,14 @@ struct StoragesView: View {
                     viewModel.cancelOTPChallenge()
                 }
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.7))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .padding(24)
-            .background(Color(red: 0.035, green: 0.04, blue: 0.055).ignoresSafeArea())
+            .background(AppColors.background.ignoresSafeArea())
             .navigationTitle("Двухфакторная защита")
             #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -138,11 +155,11 @@ struct StoragesView: View {
 
             Text("Хранилища")
                 .font(.system(size: 32, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text("Управление подключёнными облачными сервисами")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -153,16 +170,16 @@ struct StoragesView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Общее пространство")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(totalUsed.formatted(.number.precision(.fractionLength(1))))
                     .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text("из \(totalCapacity.formatted(.number.precision(.fractionLength(0)))) GB")
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
 
                 Spacer()
 
@@ -189,7 +206,7 @@ struct StoragesView: View {
                         ? max(totalCapacity - totalUsed, 0) / totalCapacity : 1
 
                     Rectangle()
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Color.primary.opacity(0.06))
                         .frame(width: geometry.size.width * CGFloat(freeFraction))
                 }
             }
@@ -208,14 +225,14 @@ struct StoragesView: View {
                 }
             }
             .font(.system(size: 12))
-            .foregroundStyle(.white.opacity(0.6))
+            .foregroundStyle(.primary.opacity(0.6))
 
             Text("Использовано \(totalCapacity > 0 ? Int(totalUsed / totalCapacity * 100) : 0)% доступного пространства")
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.primary.opacity(0.5))
         }
         .padding(18)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
@@ -225,7 +242,7 @@ struct StoragesView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Подключённые сервисы")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             ForEach(providers) { provider in
                 StorageProviderCardView(provider: provider)
@@ -246,7 +263,7 @@ struct StoragesView: View {
                 Text("Добавить хранилище")
                     .font(.system(size: 15, weight: .semibold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(Color.blue.opacity(0.8))
@@ -275,7 +292,7 @@ struct StoragesView: View {
                 }
                 .padding(20)
             }
-            .background(Color(red: 0.035, green: 0.04, blue: 0.055).ignoresSafeArea())
+            .background(AppColors.background.ignoresSafeArea())
             .navigationTitle(viewModel.activeAccount == nil ? "Подключение" : viewModel.selectedProvider.name)
             #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -374,15 +391,8 @@ struct StoragesView: View {
             } message: {
                 Text("Файл будет скопирован или перемещён в текущую папку выбранного хранилища.")
             }
-            .sheet(item: Binding(
-                get: { viewModel.activeAudioStream },
-                set: { viewModel.activeAudioStream = $0 }
-            )) { active in
-                AudioPlayerView(
-                    file: active.file,
-                    providerName: active.provider.name,
-                    stream: active.stream
-                )
+            .sheet(item: $previewItem) { item in
+                FilePreviewView(item: item, storagesViewModel: viewModel)
             }
         }
     }
@@ -400,14 +410,14 @@ struct StoragesView: View {
                         .foregroundStyle(
                             viewModel.selectedProvider == kind
                                 ? .white
-                                : .white.opacity(0.6)
+                                : .primary.opacity(0.6)
                         )
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(
                             viewModel.selectedProvider == kind
                                 ? kind.tint.opacity(0.85)
-                                : Color.white.opacity(0.06)
+                                : Color.primary.opacity(0.06)
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 11))
                 }
@@ -440,12 +450,12 @@ struct StoragesView: View {
 
             Text("Подключение \(viewModel.selectedProvider.name)")
                 .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .frame(maxWidth: .infinity)
 
             Text("Подключите аккаунт \(viewModel.selectedProvider.name), чтобы загружать резервные копии и работать с файлами облака.")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.primary.opacity(0.6))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
 
@@ -455,7 +465,7 @@ struct StoragesView: View {
                 HStack(spacing: 10) {
                     if viewModel.activeIsBusy {
                         ProgressView()
-                            .tint(.white)
+                            .tint(AppColors.textPrimary)
                     } else {
                         Image(systemName: "person.crop.circle.badge.checkmark")
                     }
@@ -463,7 +473,7 @@ struct StoragesView: View {
                     Text("Подключить \(viewModel.selectedProvider.name)")
                         .font(.system(size: 15, weight: .semibold))
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
                 .background(viewModel.selectedProvider.tint.opacity(0.85))
@@ -485,11 +495,11 @@ struct StoragesView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(viewModel.activeAccount?.displayName ?? viewModel.selectedProvider.name)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Text(viewModel.activeAccount?.email ?? "")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
 
                 Spacer()
@@ -502,7 +512,7 @@ struct StoragesView: View {
                 .disabled(viewModel.activeIsBusy)
             }
             .padding(14)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 14))
 
             // Текущая папка и действия
@@ -513,9 +523,9 @@ struct StoragesView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.textPrimary)
                             .frame(width: 38, height: 38)
-                            .background(Color.white.opacity(0.07))
+                            .background(Color.primary.opacity(0.07))
                             .clipShape(RoundedRectangle(cornerRadius: 11))
                     }
                     .buttonStyle(.plain)
@@ -524,7 +534,7 @@ struct StoragesView: View {
 
                 Text(viewModel.activeCurrentFolder?.name ?? "Корневая папка")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 Spacer()
@@ -534,9 +544,9 @@ struct StoragesView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 14))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .frame(width: 38, height: 38)
-                        .background(Color.white.opacity(0.07))
+                        .background(Color.primary.opacity(0.07))
                         .clipShape(RoundedRectangle(cornerRadius: 11))
                 }
                 .buttonStyle(.plain)
@@ -547,9 +557,9 @@ struct StoragesView: View {
                 } label: {
                     Image(systemName: "folder.badge.plus")
                         .font(.system(size: 14))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .frame(width: 38, height: 38)
-                        .background(Color.white.opacity(0.07))
+                        .background(Color.primary.opacity(0.07))
                         .clipShape(RoundedRectangle(cornerRadius: 11))
                 }
                 .buttonStyle(.plain)
@@ -560,7 +570,7 @@ struct StoragesView: View {
                 } label: {
                     Image(systemName: "arrow.up.circle")
                         .font(.system(size: 14))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.onAccent)
                         .frame(width: 38, height: 38)
                         .background(Color.blue.opacity(0.75))
                         .clipShape(RoundedRectangle(cornerRadius: 11))
@@ -576,7 +586,7 @@ struct StoragesView: View {
                         .tint(.cyan)
                     Text("Передача: \(viewModel.transferFileName ?? "")")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(1)
                     Spacer()
                     Text("\(Int(viewModel.transferProgress * 100))%")
@@ -586,10 +596,10 @@ struct StoragesView: View {
                         viewModel.cancelTransfer()
                     }
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.white.opacity(0.15))
+                    .background(Color.primary.opacity(0.15))
                     .clipShape(Capsule())
                 }
                 .padding(12)
@@ -600,13 +610,13 @@ struct StoragesView: View {
             // Список файлов
             if viewModel.activeIsBusy && viewModel.activeFiles.isEmpty {
                 ProgressView()
-                    .tint(.white)
+                    .tint(AppColors.textPrimary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
             } else if viewModel.activeFiles.isEmpty {
                 Text("В этой папке пока нет файлов.")
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(.primary.opacity(0.45))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 24)
             } else {
@@ -647,14 +657,14 @@ struct StoragesView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(file.name)
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(AppColors.textPrimary)
                             .lineLimit(1)
 
                         Text(file.isFolder
                              ? "Папка"
-                             : (file.sizeBytes.map { Self.byteFormatter.string(fromByteCount: $0) } ?? "—"))
+                             : (file.sizeBytes.map { ByteFormatting.string(fromByteCount: $0) } ?? "—"))
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(.primary.opacity(0.5))
                     }
 
                     Spacer()
@@ -662,11 +672,11 @@ struct StoragesView: View {
                     if file.isFolder {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(.primary.opacity(0.4))
                     }
                 }
                 .padding(10)
-                .background(Color.white.opacity(0.04))
+                .background(Color.primary.opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .contentShape(Rectangle())
             }
@@ -706,6 +716,17 @@ struct StoragesView: View {
                 .disabled(viewModel.activeIsBusy || viewModel.isTransferRunning)
             }
         }
+        // Long press на строке — типизированный предпросмотр файла.
+        // Тап сохраняет прежнее поведение (папка/свойства), жест
+        // не мешает кнопкам play/transfer и не вызывает удаление.
+        .onLongPressGesture(minimumDuration: 0.5) {
+            if !file.isFolder {
+                previewItem = FilePreviewItem(
+                    provider: viewModel.selectedProvider,
+                    file: file
+                )
+            }
+        }
     }
 
     private func messageRow(text: String, color: Color) -> some View {
@@ -726,7 +747,7 @@ struct StoragesView: View {
 
         if let size = file.sizeBytes {
             lines.append(
-                "Размер: \(Self.byteFormatter.string(fromByteCount: size))"
+                "Размер: \(ByteFormatting.string(fromByteCount: size))"
             )
         }
 
@@ -745,12 +766,6 @@ struct StoragesView: View {
         return lines.joined(separator: "\n")
     }
 
-    private static let byteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
-
     // MARK: - Footer
 
     @ViewBuilder
@@ -758,7 +773,7 @@ struct StoragesView: View {
         if providers.isEmpty {
             Text("Подключите облачное хранилище через кнопку «Добавить хранилище».")
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.35))
+                .foregroundStyle(.primary.opacity(0.35))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
         }

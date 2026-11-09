@@ -1,12 +1,12 @@
 import Foundation
 
 @MainActor
-struct FetchBackupRecordsUseCase{
+public struct FetchBackupRecordsUseCase{
     private let repository:BackupMetadataRepository
-    init(repository: BackupMetadataRepository) {
+    public init(repository: BackupMetadataRepository) {
         self.repository = repository
     }
-    func execute() throws ->[BackupRecord]{
+    public func execute() throws ->[BackupRecord]{
         try repository.fetchRecords()
     }
 }

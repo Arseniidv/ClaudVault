@@ -13,9 +13,9 @@ import Foundation
 /// существует — обычный `moveItem`. При любой ошибке временный
 /// файл удаляется, исходник при этом уже «переехал» — поэтому
 /// вызывающий код должен считать источник потреблённым.
-enum AtomicFileMove {
+public enum AtomicFileMove {
 
-    static func moveIntoPlace(_ source: URL, destination: URL) throws {
+    public static func moveIntoPlace(_ source: URL, destination: URL) throws {
         let fileManager = FileManager.default
         let directory = destination.deletingLastPathComponent()
 
