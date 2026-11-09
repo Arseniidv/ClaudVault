@@ -31,13 +31,13 @@ struct IPadFileRowView: View {
                 .font(.system(size: 20))
                 .foregroundStyle(Color.cyan)
                 .frame(width: 44, height: 44)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: AppRadius.medium))
 
             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(record.fileName)
                     .font(AppTypography.bodyMedium)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 HStack(spacing: 6) {
@@ -47,19 +47,19 @@ struct IPadFileRowView: View {
 
                     Text(record.storageProvider.name)
                         .font(AppTypography.caption)
-                        .foregroundStyle(Color.white.opacity(0.55))
+                        .foregroundStyle(Color.primary.opacity(0.55))
                         .lineLimit(1)
 
                     Text("·")
                         .font(AppTypography.caption)
-                        .foregroundStyle(Color.white.opacity(0.35))
+                        .foregroundStyle(Color.primary.opacity(0.35))
 
                     Text(record.updatedAt.formatted(
                         date: .abbreviated,
                         time: .shortened
                     ))
                     .font(AppTypography.caption)
-                    .foregroundStyle(Color.white.opacity(0.55))
+                    .foregroundStyle(Color.primary.opacity(0.55))
                     .lineLimit(1)
                 }
             }
@@ -71,11 +71,11 @@ struct IPadFileRowView: View {
                       ? "checkmark.circle.fill"
                       : "circle")
                     .font(.system(size: 20))
-                    .foregroundStyle(isSelected ? Color.blue : .white.opacity(0.3))
+                    .foregroundStyle(isSelected ? Color.blue : .primary.opacity(0.3))
             } else {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(.primary.opacity(0.3))
             }
         }
         .padding(AppSpacing.sm)
@@ -83,12 +83,12 @@ struct IPadFileRowView: View {
             RoundedRectangle(cornerRadius: AppRadius.large)
                 .fill(isSelected
                       ? Color.blue.opacity(0.18)
-                      : Color.white.opacity(0.045))
+                      : Color.primary.opacity(0.045))
         )
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.large)
                 .stroke(
-                    isSelected ? Color.blue.opacity(0.6) : Color.white.opacity(0.07),
+                    isSelected ? Color.blue.opacity(0.6) : Color.primary.opacity(0.07),
                     lineWidth: isSelected ? 1.5 : 1
                 )
         }
@@ -120,7 +120,7 @@ struct IPadFileGridCardView: View {
 
             Text(record.fileName)
                 .font(AppTypography.bodyMedium)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .lineLimit(2)
 
             Text(record.updatedAt.formatted(
@@ -128,7 +128,7 @@ struct IPadFileGridCardView: View {
                 time: .omitted
             ))
             .font(AppTypography.caption)
-            .foregroundStyle(Color.white.opacity(0.55))
+            .foregroundStyle(Color.primary.opacity(0.55))
             .lineLimit(1)
         }
         .padding(AppSpacing.md)
@@ -137,12 +137,12 @@ struct IPadFileGridCardView: View {
             RoundedRectangle(cornerRadius: AppRadius.large)
                 .fill(isSelected
                       ? Color.blue.opacity(0.18)
-                      : Color.white.opacity(0.045))
+                      : Color.primary.opacity(0.045))
         )
         .overlay {
             RoundedRectangle(cornerRadius: AppRadius.large)
                 .stroke(
-                    isSelected ? Color.blue.opacity(0.6) : Color.white.opacity(0.07),
+                    isSelected ? Color.blue.opacity(0.6) : Color.primary.opacity(0.07),
                     lineWidth: isSelected ? 1.5 : 1
                 )
         }

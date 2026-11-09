@@ -5,10 +5,10 @@ import Foundation
 /// MD5, SHA-1, SHA-256 и Dropbox `content_hash`
 /// (SHA-256 по блокам 4 МиБ). Данные подаются чанками —
 /// файл целиком в память не загружается.
-final class TransferHasher: @unchecked Sendable {
+public final class TransferHasher: @unchecked Sendable {
 
     /// Размер блока Dropbox content_hash.
-    static let dropboxBlockSize = 4 * 1024 * 1024
+    public static let dropboxBlockSize = 4 * 1024 * 1024
 
     private var md5 = Insecure.MD5()
     private var sha1 = Insecure.SHA1()
@@ -21,7 +21,7 @@ final class TransferHasher: @unchecked Sendable {
     private(set) var hashedBytes: Int64 = 0
     private var didFinalize = false
 
-    func update(_ data: Data) {
+    public func update(_ data: Data) {
         guard !didFinalize, !data.isEmpty else { return }
         md5.update(data: data)
         sha1.update(data: data)
@@ -44,7 +44,7 @@ final class TransferHasher: @unchecked Sendable {
 
     /// Все вычисленные хеши. Вызывать один раз после
     /// завершения передачи всех байт.
-    func finalizeHashes() -> [ContentHash] {
+    public func finalizeHashes() -> [ContentHash] {
         guard !didFinalize else { return [] }
         didFinalize = true
 

@@ -5,18 +5,32 @@ import Foundation
 /// в передаваемом файле целиком (нужна для Content-Range/курсоров).
 /// `isTemporary` — файл создан источником чанков и должен быть
 /// удалён после отправки; `false` — ссылка на исходник, не трогать.
-struct ChunkPayload: Equatable {
-    let fileURL: URL
-    let fileOffset: Int64
-    let absoluteOffset: Int64
-    let length: Int64
-    let isTemporary: Bool
+public struct ChunkPayload: Equatable {
+    public let fileURL: URL
+    public let fileOffset: Int64
+    public let absoluteOffset: Int64
+    public let length: Int64
+    public let isTemporary: Bool
+
+    public init(
+        fileURL: URL,
+        fileOffset: Int64,
+        absoluteOffset: Int64,
+        length: Int64,
+        isTemporary: Bool
+    ) {
+        self.fileURL = fileURL
+        self.fileOffset = fileOffset
+        self.absoluteOffset = absoluteOffset
+        self.length = length
+        self.isTemporary = isTemporary
+    }
 }
 
 /// Источник байтов для chunked-передачи.
 /// Реализации: локальный файл (`FileChunkSource`) и облако
 /// (`HTTPRangeChunkSource` — Range-запросы с обновлением заголовков).
-protocol ChunkSource: Sendable {
+public protocol ChunkSource: Sendable {
     var totalSize: Int64 { get }
 
     /// Готовит следующий чанк, начиная с `offset` (байт в общем файле).
@@ -37,7 +51,7 @@ protocol ChunkSource: Sendable {
 /// - `send` может принять чанк частично: тогда `confirmedOffset`
 ///   отражает реально принятое, движок продолжит с этого места.
 /// - `finish` вызывается только при `confirmedOffset == totalSize`.
-protocol TransferSession: Sendable {
+public protocol TransferSession: Sendable {
     var confirmedOffset: Int64 { get }
 
     /// Сериализуемое состояние сессии для журнала передач
@@ -60,7 +74,7 @@ protocol TransferSession: Sendable {
 
 /// Алгоритм хеша содержимого, который провайдер возвращает
 /// в метаданных файла после загрузки.
-enum ContentHashAlgorithm: String, Sendable, Codable {
+public enum ContentHashAlgorithm: String, Sendable, Codable {
     /// SHA-1 hex — Google Drive `sha1Checksum`, OneDrive `file.hashes.sha1Hash`.
     case sha1
     /// MD5 hex — Google Drive `md5Checksum`.
@@ -70,7 +84,12 @@ enum ContentHashAlgorithm: String, Sendable, Codable {
 }
 
 /// Хеш содержимого в формате конкретного провайдера.
-struct ContentHash: Equatable, Sendable, Codable {
-    let algorithm: ContentHashAlgorithm
-    let value: String
+public struct ContentHash: Equatable, Sendable, Codable {
+    public let algorithm: ContentHashAlgorithm
+    public let value: String
+
+    public init(algorithm: ContentHashAlgorithm, value: String) {
+        self.algorithm = algorithm
+        self.value = value
+    }
 }

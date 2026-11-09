@@ -1,8 +1,8 @@
 import Foundation
 
-struct BackupJob: Identifiable, Equatable {
+public struct BackupJob: Identifiable, Equatable {
 
-    enum Status: String, Codable {
+    public enum Status: String, Codable {
         case queued
         case preparing
         case uploading
@@ -12,19 +12,19 @@ struct BackupJob: Identifiable, Equatable {
         case cancelled
     }
 
-    let id: UUID
+    public let id: UUID
 
-    let startedAt: Date
+    public let startedAt: Date
 
-    var finishedAt: Date?
+    public var finishedAt: Date?
 
-    var status: Status
+    public var status: Status
 
-    var progress: Double
+    public var progress: Double
 
-    var errorMessage: String?
+    public var errorMessage: String?
 
-    init(
+    public init(
         id: UUID = UUID(),
         startedAt: Date = .now,
         finishedAt: Date? = nil,

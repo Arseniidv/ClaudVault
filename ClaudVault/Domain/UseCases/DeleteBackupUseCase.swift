@@ -1,14 +1,14 @@
 import Foundation
 
 @MainActor
-final class DeleteBackupUseCase {
+public final class DeleteBackupUseCase {
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
     /// Репозитории всех облаков — удаление идёт из облака,
     /// указанного в `record.storageProvider`.
     private let repositories: [StorageProviderType: CloudStorageRepository]?
 
-    init(
+    public init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
         repositories: [StorageProviderType: CloudStorageRepository]? = nil
@@ -43,7 +43,7 @@ final class DeleteBackupUseCase {
     /// Удаляет отдельную версию резервной копии.
     /// Сначала удаляет облачный объект, затем метаданные.
     /// Если облачного объекта уже нет (404) — метаданные тоже удаляются.
-    func execute(version: BackupVersion) async throws {
+    public func execute(version: BackupVersion) async throws {
         do {
             try await repository(for: version).deleteFile(id: version.cloudObjectID)
         } catch CloudStorageError.notFound {
@@ -59,7 +59,7 @@ final class DeleteBackupUseCase {
     /// Удаляет всю запись резервной копии со всеми версиями.
     /// Пытается удалить все облачные объекты; запись и метаданные
     /// удаляются только если все облачные удаления подтверждены.
-    func execute(record: BackupRecord) async throws {
+    public func execute(record: BackupRecord) async throws {
         let versions = try backupRepository.fetchVersions(for: record.id)
         let targetRepository = repository(for: record)
 
@@ -87,11 +87,11 @@ final class DeleteBackupUseCase {
         try backupRepository.deleteRecord(id: record.id)
     }
 
-    enum DeleteError: LocalizedError {
+    public enum DeleteError: LocalizedError {
         case cloudDeletionFailed(String)
         case metadataDeletionFailed(String)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .cloudDeletionFailed(let message):
                 return "Ошибка удаления из облака: \(message)"

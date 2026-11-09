@@ -205,7 +205,7 @@ struct IPadFilesView: View {
                 .padding(.vertical, AppSpacing.screenVertical)
             }
             .background(
-                Color(red: 0.035, green: 0.047, blue: 0.075)
+                AppColors.background
                     .ignoresSafeArea()
             )
             .navigationTitle("Файлы")
@@ -488,14 +488,14 @@ struct IPadFilesView: View {
             HStack {
                 Text("Резервные копии")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Spacer()
 
                 if isSelecting, !selectedIDs.isEmpty {
                     Text("Выбрано: \(selectedIDs.count)")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
             }
 
@@ -640,11 +640,11 @@ struct IPadFilesView: View {
             VStack(alignment: .leading, spacing: AppSpacing.md) {
                 Text("Выбрано файлов: \(selectedIDs.count)")
                     .font(AppTypography.cardTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text("Действия применяются ко всем выбранным файлам.")
                     .font(AppTypography.secondary)
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(.primary.opacity(0.55))
 
                 Button(role: .destructive) {
                     isConfirmingBatchDelete = true
@@ -663,7 +663,7 @@ struct IPadFilesView: View {
             }
             .padding(AppSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(red: 0.035, green: 0.047, blue: 0.075))
+            .background(AppColors.background)
         }
     }
 
@@ -675,11 +675,11 @@ struct IPadFilesView: View {
             HStack(spacing: 8) {
                 Text("Файлы в облаке")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 if storagesViewModel.isCloudSearchRunning {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.textPrimary)
                         .scaleEffect(0.7)
                 }
             }
@@ -688,7 +688,7 @@ struct IPadFilesView: View {
                 && !storagesViewModel.isCloudSearchRunning {
                 Text("Ничего не найдено в подключённых хранилищах.")
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 8)
             } else {
@@ -743,13 +743,13 @@ struct IPadFilesView: View {
                 .font(.system(size: 15))
                 .foregroundStyle(tint)
                 .frame(width: 34, height: 34)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 9))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.file.name)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 HStack(spacing: 5) {
@@ -759,7 +759,7 @@ struct IPadFilesView: View {
 
                     Text(result.provider.name)
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
             }
 
@@ -768,11 +768,11 @@ struct IPadFilesView: View {
             if let size = result.file.sizeBytes {
                 Text(ByteFormatting.string(fromByteCount: size))
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(.primary.opacity(0.45))
             }
         }
         .padding(10)
-        .background(Color.white.opacity(0.04))
+        .background(Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -804,7 +804,7 @@ struct IPadFilesView: View {
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
                 Text("Последние открытые")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 ForEach(items) { opened in
                     openedFileRow(opened)
@@ -822,13 +822,13 @@ struct IPadFilesView: View {
                     .font(.system(size: 15))
                     .foregroundStyle(opened.provider.tint)
                     .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.06))
+                    .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(opened.file.name)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: 5) {
@@ -838,25 +838,25 @@ struct IPadFilesView: View {
 
                         Text(opened.provider.name)
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(.primary.opacity(0.55))
 
                         Text("·")
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .foregroundStyle(.primary.opacity(0.35))
 
                         Text(opened.openedAt.formatted(
                             date: .abbreviated,
                             time: .shortened
                         ))
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.primary.opacity(0.45))
                     }
                 }
 
                 Spacer()
             }
             .padding(10)
-            .background(Color.white.opacity(0.04))
+            .background(Color.primary.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)

@@ -67,7 +67,6 @@ struct RootView: View {
                 .transition(.opacity)
             }
         }
-        .preferredColorScheme(.dark)
         .task {
             authViewModel.observeAuthState()
             // Восстановление сессии Google без показа UI.
@@ -121,6 +120,13 @@ struct RootView: View {
             Task { await storagesViewModel.handleUserChange() }
         }
         .onChange(of: scenePhase) { _, newPhase in
+            // Возврат в foreground — повторяем восстановление
+            // облаков, упавших на старте (например, офлайн):
+            // retryFailedRestores затрагивает только провайдеров
+            // в состоянии failed/notStarted, журнал передач не трогает.
+            if newPhase == .active {
+                Task { await storagesViewModel.retryFailedRestores() }
+            }
             // OAuth Dropbox выполняется во внешнем браузере: пока он
             // открыт, приложение в inactive/background — это не должно
             // блокировать CloudVault, иначе после возврата пользователь
