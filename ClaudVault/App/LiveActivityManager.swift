@@ -31,9 +31,7 @@ final class LiveActivityManager {
     /// Быстрый режим нужен, пока есть активные сессии или
     /// завершённые, ещё не показанные финальным состоянием.
     private var hasPendingWork = false
-
     private init() {}
-
     /// `false`, если пользователь запретил Live Activities в настройках
     /// (Настройки → ClaudVault → Live Activities) или на unsupported устройстве.
     var areActivitiesEnabled: Bool {
@@ -229,6 +227,7 @@ final class LiveActivityManager {
         lastUpdateDate[id] = Date()
         speedTexts[id] = "0 MB/s"
     }
+    
 
     private func updateActivity(for session: UploadSession, canCancel: Bool) async {
         guard let activity = activities[session.id] else { return }
@@ -253,7 +252,7 @@ final class LiveActivityManager {
         await activity.update(.init(state: state, staleDate: nil))
     }
 
-    /// Завершает активность сессии и убирает её из реестра.
+    @MainActor
     private func endActivity(
         id: UUID,
         statusMessage: String,
@@ -318,8 +317,6 @@ final class LiveActivityManager {
         return String(format: "%.0f KB/s", kb)
     }
 }
-
-/// no-op реализация для платформ без ActivityKit (macOS).
 #else
 
 @MainActor

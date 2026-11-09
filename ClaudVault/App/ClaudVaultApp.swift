@@ -113,9 +113,6 @@ struct ClaudVaultApp: App {
             fetchBackupRecords: FetchBackupRecordsUseCase(
                 repository: repository
             ),
-            deleteBackupRecord: DeleteBackupRecordUseCase(
-                repository: repository
-            ),
             fileAccessRepository: fileAccessRepository,
             fileHasher: fileHasher,
             backupMetadataRepository: repository

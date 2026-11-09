@@ -2,7 +2,7 @@ import Foundation
 
 /// Хранилище журнала передач. Записи в состояниях
 /// `pending`/`uploading`/`verifying` — кандидаты на возобновление.
-protocol TransferJournal: Sendable {
+public protocol TransferJournal: Sendable {
     /// Создаёт запись. Идемпотентно по `record.id`:
     /// повторный вызов с тем же id обновляет запись.
     func begin(_ record: TransferRecord) async throws
@@ -25,11 +25,11 @@ protocol TransferJournal: Sendable {
 }
 
 extension TransferJournal {
-    func setState(id: UUID, state: TransferRecord.State) async throws {
+    public func setState(id: UUID, state: TransferRecord.State) async throws {
         try await setState(id: id, state: state, error: nil)
     }
 
-    func updateProgress(id: UUID, offset: Int64) async throws {
+    public func updateProgress(id: UUID, offset: Int64) async throws {
         try await updateProgress(
             id: id,
             offset: offset,
@@ -40,11 +40,11 @@ extension TransferJournal {
         )
     }
 
-    func updateOffset(id: UUID, offset: Int64) async throws {
+    public func updateOffset(id: UUID, offset: Int64) async throws {
         try await updateProgress(id: id, offset: offset)
     }
 
-    func updateSessionState(id: UUID, state: String) async throws {
+    public func updateSessionState(id: UUID, state: String) async throws {
         try await updateProgress(
             id: id,
             offset: nil,

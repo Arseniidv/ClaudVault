@@ -3,12 +3,18 @@ import Foundation
 /// Облачный файл, который пользователь открывал в приложении.
 /// Используется в разделе «Все файлы» для показа последних открытых
 /// файлов с учётом фильтра по провайдеру.
-struct OpenedCloudFile: Identifiable, Equatable, Codable {
-    let provider: StorageProviderType
-    let file: CloudFile
-    let openedAt: Date
+public struct OpenedCloudFile: Identifiable, Equatable, Codable {
+    public let provider: StorageProviderType
+    public let file: CloudFile
+    public let openedAt: Date
 
-    var id: String {
+    public init(provider: StorageProviderType, file: CloudFile, openedAt: Date) {
+        self.provider = provider
+        self.file = file
+        self.openedAt = openedAt
+    }
+
+    public var id: String {
         "\(provider.rawValue)|\(file.id)"
     }
 }
