@@ -24,7 +24,8 @@ final class ShareActionHandler: FileActionHandling {
     func perform(
         selection: FileSelection,
         context: FileActionContext,
-        provider: StorageProviderType?
+        provider: StorageProviderType?,
+        progressHandler: @escaping (Double) -> Void
     ) async throws -> FileActionOutcome {
         guard !selection.isEmpty else {
             throw CloudStorageError.operationFailed("Нет файлов.")

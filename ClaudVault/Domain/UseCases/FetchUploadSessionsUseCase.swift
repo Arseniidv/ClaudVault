@@ -1,18 +1,18 @@
 import Foundation
 
 @MainActor
-final class FetchUploadSessionsUseCase {
+public final class FetchUploadSessionsUseCase {
     private let repository: UploadSessionRepository
 
-    init(repository: UploadSessionRepository) {
+    public init(repository: UploadSessionRepository) {
         self.repository = repository
     }
 
-    func execute() async throws -> [UploadSession] {
+    public func execute() async throws -> [UploadSession] {
         try await repository.fetchAll()
     }
 
-    func execute(id: UUID) async throws -> UploadSession? {
+    public func execute(id: UUID) async throws -> UploadSession? {
         try await repository.fetch(id: id)
     }
 }

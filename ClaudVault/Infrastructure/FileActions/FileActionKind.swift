@@ -37,7 +37,7 @@ enum FileActionKind: String, CaseIterable, Identifiable, Sendable {
         case .download:
             return "Скачать последнюю версию из облака"
         case .transfer:
-            return "Скопировать версии в другое облако"
+            return "Переместить версии в другое облако"
         case .share:
             return "Поделиться файлами через macOS"
         case .information:

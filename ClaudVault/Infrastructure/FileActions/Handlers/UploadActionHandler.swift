@@ -35,7 +35,8 @@ final class UploadActionHandler: FileActionHandling {
     func perform(
         selection: FileSelection,
         context: FileActionContext,
-        provider: StorageProviderType?
+        provider: StorageProviderType?,
+        progressHandler: @escaping (Double) -> Void
     ) async throws -> FileActionOutcome {
         guard let provider,
               context.supportedProviders.contains(provider),
@@ -50,8 +51,9 @@ final class UploadActionHandler: FileActionHandling {
         ) {
             var succeeded = 0
             var firstError: Error?
+            let total = max(selection.files.count, 1)
 
-            for file in selection.files {
+            for (index, file) in selection.files.enumerated() {
                 try Task.checkCancellation()
                 do {
                     _ = try await context.createBackupWithUpload.execute(
@@ -60,11 +62,22 @@ final class UploadActionHandler: FileActionHandling {
                         fileURL: file.url,
                         parentFolderID: nil,
                         storageProvider: provider
-                    ) { _ in }
+                    ) { fraction in
+                        let overall = (Double(index) + fraction)
+                            / Double(total)
+                        progressHandler(min(max(overall, 0), 1))
+                    }
                     succeeded += 1
                 } catch {
                     if firstError == nil { firstError = error }
                 }
+            }
+
+            // Новые облачные объекты появились в корне
+            // провайдера — обновляем списки и кэш.
+            if succeeded > 0 {
+                await context.storagesViewModel?
+                    .refreshAfterExternalChange(providers: [provider])
             }
 
             if succeeded == 0, let firstError { throw firstError }

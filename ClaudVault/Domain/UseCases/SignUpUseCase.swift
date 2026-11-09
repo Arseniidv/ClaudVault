@@ -1,12 +1,12 @@
 import Foundation
 
-struct SignUpUseCase{
+public struct SignUpUseCase{
     private let repository :AuthRepository
     
-    init(repository: AuthRepository) {
+    public init(repository: AuthRepository) {
         self.repository = repository
     }
-    func execute(
+    public func execute(
         name:String,
         email:String,
         password:String

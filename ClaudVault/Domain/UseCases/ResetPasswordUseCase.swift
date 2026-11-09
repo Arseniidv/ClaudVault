@@ -1,12 +1,12 @@
 import Foundation
 
-struct ResetPasswordUseCase{
-    let repository:AuthRepository
+public struct ResetPasswordUseCase{
+    public let repository:AuthRepository
     
-    init(repository: AuthRepository) {
+    public init(repository: AuthRepository) {
         self.repository = repository
     }
-    func execute(email:String) async throws{
+    public func execute(email:String) async throws{
         try await repository.resetPassword(email: email)
     }
 }

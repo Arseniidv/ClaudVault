@@ -7,7 +7,7 @@ import Foundation
 /// внутри строки: файл с именем `..` или `a/b` мог бы выйти за
 /// пределы целевой директории (в пределах sandbox — но с доступом
 /// к SwiftData store и кэшам приложения).
-enum SafeFileName {
+public enum SafeFileName {
 
     /// Возвращает безопасное локальное имя файла или `nil`,
     /// если имя недопустимо (`""`, `"."`, `".."`, только
@@ -16,7 +16,7 @@ enum SafeFileName {
     /// - Берётся только последний компонент пути — `/` и `\`
     ///   внутри облачного имени отбрасываются.
     /// - Управляющие символы (включая NUL) вырезаются.
-    static func sanitized(_ raw: String) -> String? {
+    public static func sanitized(_ raw: String) -> String? {
         // NSString.lastPathComponent корректно обрабатывает оба
         // разделителя и не создаёт путь из строки с ".." внутри.
         let last = (raw as NSString).lastPathComponent
@@ -37,7 +37,7 @@ enum SafeFileName {
 
     /// Как `sanitized`, но с запасным именем — для мест,
     /// где файл обязан быть записан в любом случае.
-    static func sanitized(_ raw: String, fallback: String) -> String {
+    public static func sanitized(_ raw: String, fallback: String) -> String {
         sanitized(raw) ?? fallback
     }
 }

@@ -13,4 +13,8 @@ struct FileActionContext {
     let supportedProviders: [StorageProviderType]
     /// ~/Downloads — каталог для скачивания облачных версий.
     let downloadsDirectory: URL
+    /// Общий VM хранилищ: обработчики обновляют списки
+    /// файлов и кэш после операций, меняющих облака
+    /// (загрузка, перенос). nil — в тестах и превью.
+    let storagesViewModel: StoragesViewModel?
 }
