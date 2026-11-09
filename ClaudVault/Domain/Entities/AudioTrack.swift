@@ -10,9 +10,9 @@ import Foundation
 /// - `.localFile` — уже скачанная локальная копия.
 /// - `.resolvedStream` — готовый `CloudMediaStream`
 ///   (например, полученный при открытии предпросмотра).
-struct AudioTrack: Identifiable, Equatable {
+public struct AudioTrack: Identifiable, Equatable {
 
-    enum Source: Equatable {
+    public enum Source: Equatable {
         /// Облачный файл: провайдер + метаданные.
         /// `CloudFile` хранится целиком — `id` может быть
         /// «путём» у Dropbox, поэтому для кэша используется
@@ -26,29 +26,29 @@ struct AudioTrack: Identifiable, Equatable {
 
     /// Стабильный идентификатор: "provider|fileID" или UUID
     /// для локальных файлов.
-    let id: String
+    public let id: String
     /// Отображаемое название (метаданные трека или имя файла).
-    var title: String
-    var artist: String?
-    var album: String?
+    public var title: String
+    public var artist: String?
+    public var album: String?
     /// Имя исходного файла — fallback для title.
-    let fileName: String
+    public let fileName: String
     /// Провайдер для отображения и резолва.
-    let provider: StorageProviderType
+    public let provider: StorageProviderType
     /// Длительность, если известна заранее (метаданные облака).
-    var knownDuration: TimeInterval?
-    let source: Source
+    public var knownDuration: TimeInterval?
+    public let source: Source
     /// JPEG-данные обложки (заполняются после загрузки метаданных).
-    var artworkJPEG: Data?
+    public var artworkJPEG: Data?
 
     /// Текущая длительность: сначала метаданные облака,
     /// затем длительность из AVAsset.
-    var duration: TimeInterval {
+    public var duration: TimeInterval {
         knownDuration ?? 0
     }
 
     /// Расширение имени файла без точки в нижнем регистре.
-    var fileExtension: String {
+    public var fileExtension: String {
         fileName.split(separator: ".").last?
             .lowercased() ?? ""
     }
@@ -58,7 +58,7 @@ extension AudioTrack {
 
     /// Трек из облачного файла. `title`/`artist` берутся из
     /// метаданных, если провайдер их отдал, иначе — из имени.
-    init(
+    public init(
         file: CloudFile,
         provider: StorageProviderType,
         stream: CloudMediaStream? = nil
@@ -86,7 +86,7 @@ extension AudioTrack {
     }
 
     /// Трек из локального файла (кэш/временная копия).
-    init(localFile url: URL, provider: StorageProviderType = .local) {
+    public init(localFile url: URL, provider: StorageProviderType = .local) {
         let fileName = url.lastPathComponent
         self.id = "local|\(fileName)|\(url.path)"
         self.fileName = fileName

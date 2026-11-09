@@ -4,7 +4,7 @@ import Foundation
 /// Используется для cloud-to-cloud переноса «на лету»:
 /// источник отдаёт байты по Range, цель принимает их чанками —
 /// файл не сохраняется на диск целиком и не грузится в память.
-final class HTTPChunkReader {
+public final class HTTPChunkReader {
     private let url: URL
     private let headers: [String: String]
     private let totalSize: Int64
@@ -12,7 +12,7 @@ final class HTTPChunkReader {
     private let chunkSize: Int64 = 8 * 1024 * 1024
     private let session: URLSession
 
-    init(
+    public init(
         url: URL,
         headers: [String: String],
         totalSize: Int64,
@@ -25,7 +25,7 @@ final class HTTPChunkReader {
     }
 
     /// Возвращает следующий чанк или nil, когда поток прочитан.
-    func nextChunk() async throws -> Data? {
+    public func nextChunk() async throws -> Data? {
         guard offset < totalSize else { return nil }
 
         let end = min(offset + chunkSize, totalSize) - 1
