@@ -3,15 +3,15 @@ import Foundation
 /// Запись журнала передач: позволяет возобновить chunked-загрузку
 /// после перезапуска приложения и обеспечивает идемпотентность
 /// по `id` (UUID генерируется до старта передачи).
-struct TransferRecord: Identifiable, Equatable {
-    enum Kind: String, Equatable {
+public struct TransferRecord: Identifiable, Equatable {
+    public enum Kind: String, Equatable {
         /// Локальный файл → облако.
         case upload
         /// Облако → облако.
         case cloudTransfer
     }
 
-    enum State: String, Equatable {
+    public enum State: String, Equatable {
         case pending
         case uploading
         case verifying
@@ -20,39 +20,39 @@ struct TransferRecord: Identifiable, Equatable {
         case cancelled
     }
 
-    let id: UUID
-    var kind: Kind
+    public let id: UUID
+    public var kind: Kind
     /// `StorageProviderType.rawValue` источника; пусто — локальный файл.
-    var sourceProvider: String
+    public var sourceProvider: String
     /// ID файла в облаке-источнике (для cloudTransfer).
-    var sourceFileID: String
+    public var sourceFileID: String
     /// Путь к локальному файлу-источнику (для upload).
-    var sourceFilePath: String
+    public var sourceFilePath: String
     /// `StorageProviderType.rawValue` приёмника.
-    var targetProvider: String
+    public var targetProvider: String
     /// ID папки-приёмника (пусто — корень).
-    var targetParentID: String
-    var name: String
-    var mimeType: String
-    var sizeBytes: Int64
+    public var targetParentID: String
+    public var name: String
+    public var mimeType: String
+    public var sizeBytes: Int64
     /// Подтверждённое провайдером смещение (байт).
-    var offset: Int64
+    public var offset: Int64
     /// Сериализованное состояние сессии приёмника
     /// (session URL / sessionId / uploadUrl). Без токенов.
-    var sessionState: String
+    public var sessionState: String
     /// Ожидаемый хеш содержимого (когда вычислим/известен).
-    var expectedHashAlgorithm: String
-    var expectedHashValue: String
+    public var expectedHashAlgorithm: String
+    public var expectedHashValue: String
     /// SHA-256 потока, прочитанного источником (контроль целостности передачи).
-    var streamSHA256: String
-    var state: State
+    public var streamSHA256: String
+    public var state: State
     /// При move — удалять источник только после верификации.
-    var moveSource: Bool
-    var errorMessage: String?
-    let createdAt: Date
-    var updatedAt: Date
+    public var moveSource: Bool
+    public var errorMessage: String?
+    public let createdAt: Date
+    public var updatedAt: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         kind: Kind,
         sourceProvider: String = "",
