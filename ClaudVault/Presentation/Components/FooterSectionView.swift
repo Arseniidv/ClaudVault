@@ -12,7 +12,7 @@ struct FooterSectionView: View {
 
             Text("\(connectedClouds) облака · \(totalFiles.formatted()) файлов")
                 .font(AppTypography.caption)
-                .foregroundStyle(Color.white.opacity(0.65))
+                .foregroundStyle(Color.primary.opacity(0.75))
 
             Spacer()
         }

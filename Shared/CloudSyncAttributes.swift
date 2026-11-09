@@ -20,11 +20,17 @@ struct CloudSyncAttributes: ActivityAttributes {
         var currentSpeed: String
         /// Человекочитаемый статус: "Загрузка...", "Завершено" и т.п.
         var statusMessage: String
+        /// `true`, пока загрузка активна — виджет показывает
+        /// кнопку «Отменить».
+        var canCancel: Bool
     }
 
     /// Имя загружаемого файла.
     var fileName: String
     /// Облачное хранилище: "Google Drive", "Dropbox", "OneDrive".
     var providerName: String
+    /// Id `UploadSession` — кнопка «Отменить» передаёт его
+    /// в `CancelUploadIntent`.
+    var sessionID: String
 }
 #endif

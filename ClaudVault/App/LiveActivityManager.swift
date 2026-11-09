@@ -3,24 +3,10 @@ import Foundation
 #if os(iOS) && canImport(ActivityKit)
 import ActivityKit
 
-/// Управляет Live Activities «синхронизация резервной копии»:
-/// одна `Activity<CloudSyncAttributes>` на каждую активную
-/// `UploadSession` (pending / uploading / paused).
-///
-/// Менеджер не вызывается из UI напрямую — он периодически
-/// опрашивает `FetchUploadSessionsUseCase` и приводит набор
-/// активностей в соответствие с реальными сессиями загрузки.
-/// Поэтому Live Activity отражает все фоновые передачи:
-/// создание копии, повторный анализ, retry — независимо от того,
-/// открыт ли экран «Синхронизация».
-///
-/// Класс изолирован за `#if os(iOS)` — на macOS приложение
-/// собирается без ActivityKit.
+
 @MainActor
 final class LiveActivityManager {
-
     static let shared = LiveActivityManager()
-
     /// Активные Live Activities, ключ — id `UploadSession`.
     private var activities: [UUID: Activity<CloudSyncAttributes>] = [:]
 
@@ -35,8 +21,17 @@ final class LiveActivityManager {
 
     private var monitoringTask: Task<Void, Never>?
 
-    private init() {}
+    /// UseCase выборки сессий — нужен для внеплановых сверок
+    /// по сигналу `sessionDidChange`.
+    private var fetchSessions: FetchUploadSessionsUseCase?
 
+    /// Запрос на немедленную сверку (новая сессия в репозитории).
+    private var wakeRequested = false
+
+    /// Быстрый режим нужен, пока есть активные сессии или
+    /// завершённые, ещё не показанные финальным состоянием.
+    private var hasPendingWork = false
+    private init() {}
     /// `false`, если пользователь запретил Live Activities в настройках
     /// (Настройки → ClaudVault → Live Activities) или на unsupported устройстве.
     var areActivitiesEnabled: Bool {
@@ -45,15 +40,18 @@ final class LiveActivityManager {
 
     // MARK: - Monitoring
 
-    /// Запускает фоновый мониторинг сессий загрузки: каждые ~1 c
-    /// выгружает `UploadSession` и синхронизирует Live Activities.
+    /// Запускает фоновый мониторинг сессий загрузки.
+    /// Пока есть активные передачи — опрос каждую ~1 c; в простое
+    /// интервал растягивается до 15 c, а новая сессия будит
+    /// мониторинг через `sessionDidChange` без ожидания тика.
     /// Вызывать один раз при старте приложения.
     func startMonitoring(fetchSessions: FetchUploadSessionsUseCase) {
+        self.fetchSessions = fetchSessions
         guard monitoringTask == nil else { return }
         monitoringTask = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.syncOnce(fetchSessions: fetchSessions)
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                await self?.sleepUntilNextPoll()
             }
         }
     }
@@ -62,6 +60,32 @@ final class LiveActivityManager {
     func stopMonitoring() {
         monitoringTask?.cancel()
         monitoringTask = nil
+    }
+
+    /// Сигнал от `UploadSessionRepository` о сохранении сессии:
+    /// будит мониторинг, чтобы Live Activity появилась сразу,
+    /// а не на следующем медленном тике.
+    nonisolated func sessionDidChange() {
+        Task { @MainActor [weak self] in
+            self?.wakeRequested = true
+        }
+    }
+
+    private func sleepUntilNextPoll() async {
+        let interval: TimeInterval =
+            (hasPendingWork || !activities.isEmpty) ? 1 : 15
+        let deadline = Date().addingTimeInterval(interval)
+        while !Task.isCancelled {
+            if wakeRequested {
+                wakeRequested = false
+                return
+            }
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { return }
+            try? await Task.sleep(
+                nanoseconds: UInt64(min(remaining, 0.5) * 1_000_000_000)
+            )
+        }
     }
 
     private func syncOnce(fetchSessions: FetchUploadSessionsUseCase) async {
@@ -78,14 +102,35 @@ final class LiveActivityManager {
 
         let sessionIDs = Set(sessions.map(\.id))
 
+        // Быстрый опрос нужен, пока есть активные сессии или
+        // завершённые, которые ещё не показали финальное состояние.
+        hasPendingWork = sessions.contains { session in
+            Self.isActive(session.status)
+                || !finalizedSessionIDs.contains(session.id)
+        }
+        finalizedSessionIDs = finalizedSessionIDs.filter {
+            sessionIDs.contains($0)
+        }
+
         // Завершённые и ошибочные — показываем финальное состояние один раз.
         for session in sessions where !Self.isActive(session.status) {
+            // Флаг отмены больше не нужен: загрузка уже завершилась.
+            UploadCancellation.clear(session.id)
+
             guard !finalizedSessionIDs.contains(session.id) else { continue }
             finalizedSessionIDs.insert(session.id)
 
-            let statusMessage = session.status == .completed
-                ? "Завершено"
-                : "Ошибка"
+            let statusMessage: String
+            switch session.status {
+            case .completed:
+                statusMessage = "Завершено"
+            case .failed:
+                statusMessage = Self.isCancellationMessage(session.errorMessage)
+                    ? "Отменено"
+                    : "Ошибка"
+            default:
+                statusMessage = "Прервано"
+            }
             let finalProgress = session.status == .completed
                 ? 1.0
                 : session.progress
@@ -110,7 +155,8 @@ final class LiveActivityManager {
                 )
             }
 
-            await updateActivity(for: session)
+            // Сессия активна — кнопка «Отменить» доступна.
+            await updateActivity(for: session, canCancel: true)
         }
 
         // Сессии, которых больше нет в хранилище (удалены
@@ -135,6 +181,12 @@ final class LiveActivityManager {
         status == .pending || status == .uploading || status == .paused
     }
 
+    /// `errorMessage` сессии означает отмену пользователем —
+    /// Live Activity показывает «Отменено» вместо «Ошибка».
+    private static func isCancellationMessage(_ message: String?) -> Bool {
+        message?.localizedCaseInsensitiveContains("отмен") == true
+    }
+
     private static func statusMessage(for status: SessionStatus) -> String {
         switch status {
         case .pending: return "Подготовка к загрузке..."
@@ -145,7 +197,6 @@ final class LiveActivityManager {
         }
     }
 
-    // MARK: - Activity lifecycle
 
     /// Запускает Live Activity для сессии загрузки.
     private func startActivity(
@@ -155,12 +206,14 @@ final class LiveActivityManager {
     ) {
         let attributes = CloudSyncAttributes(
             fileName: fileName,
-            providerName: providerName
+            providerName: providerName,
+            sessionID: id.uuidString
         )
         let state = CloudSyncAttributes.ContentState(
             progress: 0,
             currentSpeed: "0 MB/s",
-            statusMessage: "Подготовка к загрузке..."
+            statusMessage: "Подготовка к загрузке...",
+            canCancel: true
         )
 
         if let activity = try? Activity.request(
@@ -174,9 +227,9 @@ final class LiveActivityManager {
         lastUpdateDate[id] = Date()
         speedTexts[id] = "0 MB/s"
     }
+    
 
-    /// Обновляет прогресс активности по текущему состоянию сессии.
-    private func updateActivity(for session: UploadSession) async {
+    private func updateActivity(for session: UploadSession, canCancel: Bool) async {
         guard let activity = activities[session.id] else { return }
 
         let progress = min(max(session.progress, 0), 1)
@@ -192,13 +245,14 @@ final class LiveActivityManager {
         let state = CloudSyncAttributes.ContentState(
             progress: progress,
             currentSpeed: speedText,
-            statusMessage: Self.statusMessage(for: session.status)
+            statusMessage: Self.statusMessage(for: session.status),
+            canCancel: canCancel
         )
 
         await activity.update(.init(state: state, staleDate: nil))
     }
 
-    /// Завершает активность сессии и убирает её из реестра.
+    @MainActor
     private func endActivity(
         id: UUID,
         statusMessage: String,
@@ -215,7 +269,8 @@ final class LiveActivityManager {
         let state = CloudSyncAttributes.ContentState(
             progress: min(max(progress, 0), 1),
             currentSpeed: lastSpeed,
-            statusMessage: statusMessage
+            statusMessage: statusMessage,
+            canCancel: false
         )
 
         await activity.end(
@@ -226,8 +281,6 @@ final class LiveActivityManager {
 
     // MARK: - Speed calculation
 
-    /// Скорость по дельте между опросами; при слишком частых
-    /// вызовах (<0.2 c) сохраняем прошлое значение, чтобы не мигало.
     private static func speedText(
         for sessionID: UUID,
         uploadedBytes: Int64,
@@ -264,8 +317,6 @@ final class LiveActivityManager {
         return String(format: "%.0f KB/s", kb)
     }
 }
-
-/// no-op реализация для платформ без ActivityKit (macOS).
 #else
 
 @MainActor
@@ -277,6 +328,7 @@ final class LiveActivityManager {
 
     func startMonitoring(fetchSessions: FetchUploadSessionsUseCase) {}
     func stopMonitoring() {}
+    nonisolated func sessionDidChange() {}
     func sync(with sessions: [UploadSession]) async {}
 }
 

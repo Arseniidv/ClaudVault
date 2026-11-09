@@ -31,8 +31,8 @@ struct WidgetAccountInfo: Codable, Identifiable, Equatable {
 /// Ключи канала обмена через App Group.
 /// Значения должны совпадать в приложении и расширении виджета.
 enum WidgetStorage {
-    static let appGroupID = "group.com.Arseniidv.ClaudVault"
-    static let dataKey = "latest_storage_widget_data"
+    nonisolated static let appGroupID = "group.com.Arseniidv.ClaudVault"
+    nonisolated static let dataKey = "latest_storage_widget_data"
 }
 
 /// Снимок состояния всех облачных хранилищ для виджета.

@@ -1,6 +1,6 @@
 import Foundation
 
-protocol UploadSessionRepository {
+public protocol UploadSessionRepository {
     func save(_ session: UploadSession) async throws
     func fetchAll() async throws -> [UploadSession]
     func fetch(id: UUID) async throws -> UploadSession?

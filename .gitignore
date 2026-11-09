@@ -14,7 +14,9 @@ DerivedData/
 
 # Project-local build data
 .derivedData/
+.derivedDataBuild/
 .derivedDataFresh/
+build/
 .freebuff/
 .git.nested-backup/
 

@@ -32,6 +32,20 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
         try modelContext.save()
     }
     
+    func updateVersion(_ version: BackupVersion) throws {
+        let descriptor = FetchDescriptor<BackupVersionModel>(
+            predicate: #Predicate { $0.id == version.id }
+        )
+        guard let model = try modelContext.fetch(descriptor).first else {
+            return
+        }
+        model.fileSize = version.fileSize
+        model.checksum = version.checksum
+        model.cloudObjectID = version.cloudObjectID
+        model.uploadedAt = version.uploadedAt
+        try modelContext.save()
+    }
+
     func deleteVersion(id: UUID) throws {
         let descriptor = FetchDescriptor<BackupVersionModel>(
             predicate: #Predicate { $0.id == id }

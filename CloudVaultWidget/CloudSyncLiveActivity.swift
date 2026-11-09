@@ -8,12 +8,12 @@
 
 import WidgetKit
 import SwiftUI
+import AppIntents
 #if os(iOS) && canImport(ActivityKit)
 import ActivityKit
 
 private enum LiveActivityPalette {
     static let background = Color(red: 0.035, green: 0.045, blue: 0.075)
-    static let accent = Color(red: 0.25, green: 0.48, blue: 1.00)
     static let success = Color(red: 0.25, green: 0.78, blue: 0.52)
 }
 
@@ -28,7 +28,7 @@ struct CloudSyncLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.leading) {
                     Image(systemName: "externaldrive.fill")
                         .font(.system(size: 18))
-                        .foregroundStyle(LiveActivityPalette.accent)
+                        .foregroundStyle(ProviderPalette.color(forProviderName: context.attributes.providerName))
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text("\(Int(context.state.progress * 100))%")
@@ -50,12 +50,15 @@ struct CloudSyncLiveActivity: Widget {
                     VStack(spacing: 6) {
                         ProgressView(value: context.state.progress)
                             .progressViewStyle(.linear)
-                            .tint(LiveActivityPalette.accent)
+                            .tint(ProviderPalette.color(forProviderName: context.attributes.providerName))
                         HStack {
                             Text(context.state.statusMessage)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.white.opacity(0.6))
                             Spacer()
+                            if context.state.canCancel {
+                                CancelUploadButton(sessionID: context.attributes.sessionID)
+                            }
                             Text(context.state.currentSpeed)
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(LiveActivityPalette.success)
@@ -66,7 +69,7 @@ struct CloudSyncLiveActivity: Widget {
                 // MARK: Compact leading — иконка облака
                 Image(systemName: "externaldrive.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(LiveActivityPalette.accent)
+                    .foregroundStyle(ProviderPalette.color(forProviderName: context.attributes.providerName))
             } compactTrailing: {
                 // MARK: Compact trailing — процент
                 Text("\(Int(context.state.progress * 100))%")
@@ -77,9 +80,9 @@ struct CloudSyncLiveActivity: Widget {
                 // MARK: Minimal (несколько активностей)
                 Image(systemName: "externaldrive.fill")
                     .font(.system(size: 12))
-                    .foregroundStyle(LiveActivityPalette.accent)
+                    .foregroundStyle(ProviderPalette.color(forProviderName: context.attributes.providerName))
             }
-            .keylineTint(LiveActivityPalette.accent)
+            .keylineTint(ProviderPalette.color(forProviderName: context.attributes.providerName))
         }
     }
 }
@@ -94,7 +97,7 @@ private struct LockScreenLiveActivityView: View {
             HStack {
                 Image(systemName: "arrow.up.doc.fill")
                     .font(.system(size: 18))
-                    .foregroundStyle(LiveActivityPalette.accent)
+                    .foregroundStyle(ProviderPalette.color(forProviderName: context.attributes.providerName))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(context.attributes.fileName)
                         .font(.system(size: 15, weight: .semibold))
@@ -112,13 +115,16 @@ private struct LockScreenLiveActivityView: View {
 
             ProgressView(value: context.state.progress)
                 .progressViewStyle(.linear)
-                .tint(LiveActivityPalette.accent)
+                .tint(ProviderPalette.color(forProviderName: context.attributes.providerName))
 
             HStack {
                 Text(context.state.statusMessage)
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.6))
                 Spacer()
+                if context.state.canCancel {
+                    CancelUploadButton(sessionID: context.attributes.sessionID)
+                }
                 Text(context.state.currentSpeed)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(LiveActivityPalette.success)
@@ -127,6 +133,22 @@ private struct LockScreenLiveActivityView: View {
         .padding(16)
         .activityBackgroundTint(LiveActivityPalette.background)
         .activitySystemActionForegroundColor(.white)
+    }
+}
+
+/// Кнопка отмены: `AppIntent` помечает `UploadSession`
+/// отменённой — приложение остановит загрузку на ближайшей
+/// границе чанка, не открывая UI.
+private struct CancelUploadButton: View {
+    let sessionID: String
+
+    var body: some View {
+        Button(intent: CancelUploadIntent(sessionID: sessionID)) {
+            Label("Отменить", systemImage: "xmark.circle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.red.opacity(0.9))
+        }
+        .buttonStyle(.plain)
     }
 }
 #endif
