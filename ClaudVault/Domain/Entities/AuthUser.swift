@@ -1,14 +1,21 @@
 import Foundation
 
-struct AuthUser:Identifiable,Equatable{
-    let id:UUID
-    let email:String
-    let displayName:String?
-    let emailVerified:Bool
+public struct AuthUser:Identifiable,Equatable{
+    public let id:UUID
+    public let email:String
+    public let displayName:String?
+    public let emailVerified:Bool
+
+    public init(id: UUID, email: String, displayName: String?, emailVerified: Bool) {
+        self.id = id
+        self.email = email
+        self.displayName = displayName
+        self.emailVerified = emailVerified
+    }
 }
 
 extension AuthUser {
-    var resolvedDisplayName: String {
+    public var resolvedDisplayName: String {
         if let displayName = displayName?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !displayName.isEmpty {
@@ -24,7 +31,7 @@ extension AuthUser {
         return localPart.isEmpty ? "Пользователь" : localPart
     }
 
-    var resolvedEmail: String {
+    public var resolvedEmail: String {
         let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedEmail.isEmpty ? "—" : trimmedEmail
     }

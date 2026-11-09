@@ -5,15 +5,23 @@ import Security
 ///
 /// Записи лежат в едином сервисе `com.claudvault.storage.auth`
 /// через `KeychainItemStore` — с `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`
-/// и Data Protection Keychain на macOS. При первом обращении
-/// выполняется разовый перенос из легаси-сервиса
-/// `my.ClaudVault.onedrive`.
+/// и Data Protection Keychain на macOS. Ключ аккаунта включает
+/// `ownerID` текущего пользователя (`onedrive|tokens|<ownerID>`),
+/// поэтому токены разных аккаунтов CloudVault не пересекаются.
+///
+/// Токены, сохранённые до введения изоляции (общий ключ
+/// `onedrive|tokens` и легаси-сервис `my.ClaudVault.onedrive`),
+/// владельца не имеют и НЕ мигрируются — `deleteLegacyItems`
+/// удаляет их при первом входе, чтобы исключить утечку чужих
+/// credentials. Пользователю достаточно один раз переподключить
+/// OneDrive.
 struct OneDriveTokenStore {
 
-    private static let account = "onedrive|tokens"
+    private static let accountPrefix = "onedrive|tokens"
+    /// Легаси-ключ до версионирования по ownerID.
+    private static let legacyAccount = "onedrive|tokens"
     private static let legacyService = "my.ClaudVault.onedrive"
-    private static let legacyAccount = "tokens"
-    private static let migrationFlagKey = "OneDriveKeychainMigrationV1"
+    private static let legacyAccountName = "tokens"
 
     struct StoredTokens: Codable {
         var accessToken: String
@@ -22,68 +30,48 @@ struct OneDriveTokenStore {
         var expiresAt: Date
     }
 
-    func load() -> StoredTokens? {
-        if let data = KeychainItemStore.load(account: Self.account),
-           let tokens = try? JSONDecoder().decode(StoredTokens.self, from: data) {
-            return tokens
+    /// Аккаунт текущего пользователя; nil — сеанса нет,
+    /// читать/писать нельзя.
+    private var scopedAccount: String? {
+        guard let ownerID = CurrentUserContext.shared.ownerID,
+              !ownerID.isEmpty else {
+            return nil
         }
-        return loadLegacyAndMigrate()
+        return "\(Self.accountPrefix)|\(ownerID)"
+    }
+
+    func load() -> StoredTokens? {
+        guard let account = scopedAccount,
+              let data = KeychainItemStore.load(account: account) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(StoredTokens.self, from: data)
     }
 
     func save(_ tokens: StoredTokens) {
-        guard let data = try? JSONEncoder().encode(tokens) else { return }
-        try? KeychainItemStore.save(data, account: Self.account)
+        guard let account = scopedAccount,
+              let data = try? JSONEncoder().encode(tokens) else { return }
+        try? KeychainItemStore.save(data, account: account)
     }
 
     func delete() {
-        try? KeychainItemStore.delete(account: Self.account)
+        guard let account = scopedAccount else { return }
+        try? KeychainItemStore.delete(account: account)
     }
 
-    /// Одноразовый перенос токенов из легаси Keychain-сервиса
-    /// `my.ClaudVault.onedrive` в единое хранилище.
-    /// На macOS легаси-айтемы лежат в файловой связке ключей,
-    /// поэтому запрос к ним идёт без `kSecUseDataProtectionKeychain`.
-    private func loadLegacyAndMigrate() -> StoredTokens? {
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: Self.migrationFlagKey) else {
-            return nil
-        }
+    /// Удаляет токены, сохранённые до введения owner-изоляции:
+    /// общий ключ `onedrive|tokens` и айтемы легаси-сервиса
+    /// `my.ClaudVault.onedrive`. Вызывается один раз при входе
+    /// пользователя — см. `UserSessionCoordinator`.
+    static func deleteLegacyItems() {
+        try? KeychainItemStore.delete(account: legacyAccount)
 
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.legacyService,
-            kSecAttrAccount as String: Self.legacyAccount,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        // Флаг ставим только при однозначном ответе Keychain:
-        // айтем найден (мигрируем) или его нет (мигрировать нечего).
-        // При прочих ошибках (например, `errSecInteractionNotAllowed`
-        // на заблокированном устройстве) миграция повторится
-        // при следующем обращении.
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            return nil
-        }
-        defaults.set(true, forKey: Self.migrationFlagKey)
-
-        guard status == errSecSuccess,
-              let data = result as? Data,
-              let tokens = try? JSONDecoder().decode(
-                  StoredTokens.self, from: data
-              ) else {
-            return nil
-        }
-
-        try? KeychainItemStore.save(data, account: Self.account)
+        // На macOS легаси-айтемы лежат в файловой связке ключей,
+        // поэтому запрос идёт без `kSecUseDataProtectionKeychain`.
         SecItemDelete([
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.legacyService,
-            kSecAttrAccount as String: Self.legacyAccount
+            kSecAttrService as String: legacyService,
+            kSecAttrAccount as String: legacyAccountName
         ] as CFDictionary)
-        return tokens
     }
 }

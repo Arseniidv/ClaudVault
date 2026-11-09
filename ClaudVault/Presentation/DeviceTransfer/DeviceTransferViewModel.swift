@@ -260,6 +260,10 @@ final class DeviceTransferViewModel {
             statusMessage = restored.isEmpty
                 ? "Пакет применён, но подходящих подключений в нём не было."
                 : "Подключения восстановлены: \(restored.joined(separator: ", "))."
+            // Токены записаны в Keychain — просим StoragesViewModel
+            // переиграть восстановление сессий, иначе импорт
+            // был бы невидим до перезапуска приложения.
+            coordinator.onConnectionsRestored?()
         } catch {
             phase = .failed(failureMessage(for: error))
         }

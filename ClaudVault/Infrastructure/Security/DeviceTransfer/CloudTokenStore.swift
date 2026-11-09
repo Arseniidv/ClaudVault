@@ -50,7 +50,10 @@ final class CloudTokenStore {
             .sharedOAuthManager?
             .getFirstAccessToken(),
             !token.accessToken.isEmpty,
-            dropboxStorage.owner(ofDropboxUID: token.uid) == ownerID else {
+            (try? dropboxStorage.isTokenOwned(
+                uid: token.uid,
+                ownerID: ownerID
+            )) == true else {
             return nil
         }
         return CloudTokenPayload.DropboxTokens(
@@ -80,7 +83,7 @@ final class CloudTokenStore {
         // Fallback: сессия, восстановленная через QR-перенос
         // или экспортированная при смене пользователя.
         // GIDSignIn о ней не знает, токены лежат в GoogleSessionStore.
-        guard let session = googleSessionStore.load(ownerID: ownerID),
+        guard let session = try? googleSessionStore.load(ownerID: ownerID),
               !session.refreshToken.isEmpty,
               session.grantedScopes.contains(GoogleOAuthManager.driveScope) else {
             return nil
@@ -108,7 +111,11 @@ final class CloudTokenStore {
         ) != nil {
             return true
         }
-        return googleSessionStore.load(ownerID: ownerID)?.email == email
+        do {
+            return try googleSessionStore.load(ownerID: ownerID)?.email == email
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Restore
@@ -138,12 +145,14 @@ final class CloudTokenStore {
         }
 
         if let tokens = payload.dropbox {
-            restoreDropbox(tokens, ownerID: ownerID)
+            try restoreDropbox(tokens, ownerID: ownerID)
             restored.append("Dropbox")
         }
 
         if let tokens = payload.google {
-            googleSessionStore.save(GoogleRestoredSession(
+            // Ошибка записи пробрасывается — иначе UI отрапортовал
+            // бы «Google Drive» восстановленным при пустом Keychain.
+            try googleSessionStore.save(GoogleRestoredSession(
                 refreshToken: tokens.refreshToken,
                 clientID: tokens.clientID,
                 userID: tokens.userID,
@@ -159,17 +168,23 @@ final class CloudTokenStore {
         return restored
     }
 
-    /// Восстановление Dropbox: кладём refresh-токен в Keychain-стор
-    /// SwiftyDropbox, фиксируем владельца и поднимаем authorizedClient —
-    /// дальше SDK сам обновляет access token'ы, а при следующем
-    /// запуске сессия подхватится через `setupWithAppKey` для
-    /// пользователей с записью о владельце.
+    /// Восстановление Dropbox: кладём полный токен (access + refresh +
+    /// expiration) в Keychain-стор SwiftyDropbox. `storeAccessToken`
+    /// пишет owner-scoped запись текущего пользователя — отдельный
+    /// owner-маппинг больше не нужен. Дальше SDK сам обновляет
+    /// access token'ы, а при следующем запуске сессия подхватится
+    /// через `setupWithAppKey`/`restoreOwnedClient`.
     private func restoreDropbox(
         _ tokens: CloudTokenPayload.DropboxTokens,
         ownerID: String
-    ) {
+    ) throws {
         guard let manager = DropboxOAuthManager.sharedOAuthManager else {
-            return
+            throw DeviceTransferError.storageFailed
+        }
+        // Токен будет записан под CurrentUserContext — он обязан
+        // совпадать с владельцем, для которого собирали пакет.
+        guard CurrentUserContext.shared.ownerID == ownerID else {
+            throw DeviceTransferError.notAuthenticated
         }
         let token = DropboxAccessToken(
             accessToken: tokens.accessToken,
@@ -177,11 +192,12 @@ final class CloudTokenStore {
             refreshToken: tokens.refreshToken,
             tokenExpirationTimestamp: tokens.tokenExpirationTimestamp
         )
-        dropboxStorage.setOwner(ownerID, forDropboxUID: token.uid)
-        _ = manager.storeAccessToken(token)
+        guard manager.storeAccessToken(token) else {
+            throw DeviceTransferError.storageFailed
+        }
         DropboxClientsManager.authorizedClient = DropboxClient(
-            accessToken: token,
-            dropboxOauthManager: manager
+            accessTokenProvider: manager.accessTokenProviderForToken(token),
+            sessionConfiguration: .default
         )
     }
 }

@@ -30,7 +30,7 @@ struct DeviceTransferView: View {
                 }
                 .padding(20)
             }
-            .background(Color(red: 0.035, green: 0.04, blue: 0.055).ignoresSafeArea())
+            .background(AppColors.background.ignoresSafeArea())
             .navigationTitle("Перенос подключений")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -66,11 +66,11 @@ struct DeviceTransferView: View {
 
             Text("Перенос подключений")
                 .font(.system(size: 26, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text("Безопасно перенесите Google Drive, Dropbox и OneDrive на другое устройство с помощью QR-кода. Данные шифруются end-to-end.")
                 .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
         }
     }
 
@@ -114,19 +114,19 @@ struct DeviceTransferView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                     Text(subtitle)
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(.primary.opacity(0.35))
             }
             .padding(16)
-            .background(Color.white.opacity(0.05))
+            .background(Color.primary.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
@@ -166,7 +166,7 @@ struct DeviceTransferView: View {
                     viewModel.cancelGenerator()
                 }
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.7))
             }
 
             if case .awaitingRestore = viewModel.phase {
@@ -182,17 +182,17 @@ struct DeviceTransferView: View {
                             viewModel.cancelRestore()
                         }
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.primary.opacity(0.7))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.06))
+                        .background(Color.primary.opacity(0.06))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
 
                         Button("Применить") {
                             viewModel.confirmRestore()
                         }
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.onAccent)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(Color.blue.opacity(0.85))
@@ -219,7 +219,7 @@ struct DeviceTransferView: View {
                     .frame(height: 280)
                     .overlay(
                         Text("Камера недоступна")
-                            .foregroundStyle(.white.opacity(0.5))
+                            .foregroundStyle(.primary.opacity(0.5))
                     )
                 #else
                 manualEntrySection
@@ -238,7 +238,7 @@ struct DeviceTransferView: View {
         VStack(alignment: .leading, spacing: 14) {
             Label("Входящий запрос на перенос", systemImage: "arrow.triangle.2.circlepath")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             VStack(alignment: .leading, spacing: 6) {
                 if let email = pending.ownerEmail, !email.isEmpty {
@@ -258,24 +258,24 @@ struct DeviceTransferView: View {
 
             Text("Будут отправлены токены всех подключённых облаков (Google Drive, Dropbox, OneDrive). Убедитесь, что запрос создан на вашем новом устройстве.")
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
 
             HStack(spacing: 12) {
                 Button("Отклонить") {
                     viewModel.cancelPendingTransfer()
                 }
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.primary.opacity(0.7))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-                .background(Color.white.opacity(0.06))
+                .background(Color.primary.opacity(0.06))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
                 Button("Отправить подключения") {
                     viewModel.approvePendingTransfer()
                 }
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.onAccent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(Color.blue.opacity(0.85))
@@ -283,7 +283,7 @@ struct DeviceTransferView: View {
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.05))
+        .background(Color.primary.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -291,11 +291,11 @@ struct DeviceTransferView: View {
         HStack {
             Text(title)
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(.primary.opacity(0.45))
             Spacer()
             Text(value)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -315,13 +315,13 @@ struct DeviceTransferView: View {
                 VStack(spacing: 12) {
                     Text("Наведите камеру на QR-код с нового устройства")
                         .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.primary.opacity(0.6))
                         .multilineTextAlignment(.center)
 
                     manualEntrySection
                 }
                 .padding(20)
-                .background(Color(red: 0.035, green: 0.04, blue: 0.055))
+                .background(AppColors.background)
             }
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Сканирование QR")
@@ -348,9 +348,9 @@ struct DeviceTransferView: View {
             )
             .textFieldStyle(.plain)
             .font(.system(size: 13))
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.textPrimary)
             .padding(12)
-            .background(Color.white.opacity(0.07))
+            .background(Color.primary.opacity(0.07))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .autocorrectionDisabled()
             #if os(iOS)
@@ -362,7 +362,7 @@ struct DeviceTransferView: View {
                 viewModel.submitManualSession()
             }
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .background(Color.blue.opacity(0.8))
@@ -391,13 +391,13 @@ struct DeviceTransferView: View {
                 ProgressView().tint(.cyan)
                 Text(viewModel.statusMessage)
                     .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.primary.opacity(0.7))
             }
         case .awaitingScan, .awaitingRestore, .completed, .expired, .failed:
             VStack(spacing: 10) {
                 Text(viewModel.statusMessage)
                     .font(.system(size: 14))
-                    .foregroundStyle(isFailedPhase ? .red : .white.opacity(0.75))
+                    .foregroundStyle(isFailedPhase ? .red : .primary.opacity(0.75))
                     .multilineTextAlignment(.center)
 
                 if case .completed = viewModel.phase {

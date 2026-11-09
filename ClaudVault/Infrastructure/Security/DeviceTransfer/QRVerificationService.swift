@@ -496,6 +496,7 @@ enum DeviceTransferError: LocalizedError {
     case submissionFailed
     case backendUnavailable
     case unsupportedPayloadVersion
+    case storageFailed
 
     var errorDescription: String? {
         switch self {
@@ -523,6 +524,8 @@ enum DeviceTransferError: LocalizedError {
             return "Firestore не отвечает. Проверьте, что база данных создана в консоли Firebase и правила безопасности задеплоены."
         case .unsupportedPayloadVersion:
             return "Формат данных переноса не поддерживается этой версией приложения."
+        case .storageFailed:
+            return "Не удалось сохранить перенесённые подключения в Keychain."
         }
     }
 }

@@ -1,7 +1,7 @@
 
 import Foundation
 
-protocol AuthRepository {
+public protocol AuthRepository {
     func signIn(
         email: String,
         password: String

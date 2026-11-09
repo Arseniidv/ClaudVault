@@ -7,7 +7,7 @@ struct AppLockView: View {
     @State private var errorMessage: String?
     var body: some View {
         ZStack {
-            Color(red: 0.035, green: 0.045, blue: 0.075)
+            AppColors.background
                 .ignoresSafeArea()
 
             VStack(spacing: 24) {
@@ -20,11 +20,11 @@ struct AppLockView: View {
                 VStack(spacing: 8) {
                     Text("CloudVault заблокирован")
                         .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Text("Подтвердите личность для продолжения")
                         .font(.system(size: 14))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.primary.opacity(0.5))
                 }
 
                 if let errorMessage {

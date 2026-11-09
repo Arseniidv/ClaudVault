@@ -104,18 +104,18 @@ struct SettingsView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Перенос на другое устройство")
                                         .font(.system(size: 14, weight: .medium))
-                                        .foregroundStyle(.white)
+                                        .foregroundStyle(AppColors.textPrimary)
 
                                     Text("QR-код для переноса облачных подключений")
                                         .font(.system(size: 11))
-                                        .foregroundStyle(.white.opacity(0.5))
+                                        .foregroundStyle(.primary.opacity(0.5))
                                 }
 
                                 Spacer()
 
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.35))
+                                    .foregroundStyle(.primary.opacity(0.35))
                             }
                             .padding(14)
                         }
@@ -220,7 +220,7 @@ struct SettingsView: View {
             }
             .padding(20)
         }
-        .background(Color(red: 0.035, green: 0.045, blue: 0.075))
+        .background(AppColors.background)
         .navigationTitle("Настройки")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -280,6 +280,9 @@ struct SettingsView: View {
         if !GlobalHotKeyManager.shared.isRegistered {
             return "\(preset.title) занята другим приложением"
         }
+        if preset.systemConflict != nil {
+            return "\(preset.title) — возможен конфликт с macOS"
+        }
         return "\(preset.title) — вызвать Radial Menu"
     }
 
@@ -288,7 +291,8 @@ struct SettingsView: View {
         let preset = RadialHotKeyPreset(
             rawValue: radialHotKeyPresetRaw
         ) ?? .optionSpace
-        return HStack(spacing: 12) {
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 12) {
             Image(systemName: "command")
                 .font(.system(size: 17))
                 .foregroundStyle(.cyan)
@@ -297,11 +301,11 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Сочетание клавиш")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text("Вызов Radial Menu")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
             }
 
             Spacer()
@@ -315,13 +319,22 @@ struct SettingsView: View {
                     } label: {
                         if option == preset {
                             Label(option.title, systemImage: "checkmark")
+                        } else if option.systemConflict != nil {
+                            Label(
+                                "\(option.title) ⚠",
+                                systemImage: "exclamationmark.triangle"
+                            )
                         } else {
                             Text(option.title)
                         }
                     }
                 }
             } label: {
-                Text(preset.title)
+                Text(
+                    preset.systemConflict != nil
+                        ? "\(preset.title) ⚠"
+                        : preset.title
+                )
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.black)
                     .padding(.horizontal, 12)
@@ -331,6 +344,18 @@ struct SettingsView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            }
+
+            if let conflict = preset.systemConflict {
+                Label(
+                    "Это сочетание может конфликтовать с macOS: "
+                    + conflict + ". Вызов Radial Menu может не срабатывать.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .font(.system(size: 11))
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 4)
+            }
         }
         .padding(14)
     }
@@ -341,10 +366,10 @@ struct SettingsView: View {
             showAbout = true
         } label: {
             Label("О приложении", systemImage: "info.circle")
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
-                .background(Color.white.opacity(0.05))
+                .background(Color.primary.opacity(0.05))
                 .clipShape(RoundedRectangle(cornerRadius: 14))
         }
     }
@@ -390,13 +415,13 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Подтверждение почты")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
                     Text(isVerified
                          ? "Почта подтверждена"
                          : "Подтвердите email ссылкой из письма")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.primary.opacity(0.5))
                 }
 
                 Spacer()
@@ -431,12 +456,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Label(title, systemImage: icon)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             VStack(spacing: 0) {
                 content()
             }
-            .background(Color.white.opacity(0.05))
+            .background(Color.primary.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
     }
@@ -458,11 +483,11 @@ private struct SettingsToggleRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Text(subtitle)
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
             }
 
             Spacer()

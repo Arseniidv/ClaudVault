@@ -7,7 +7,7 @@ import Foundation
 /// Хеши корректны только если передача началась с offset=0
 /// и дошла до конца без пропусков — иначе `finalizeHashes`
 /// вернёт nil и верификация ограничится размером.
-final class HashingChunkSource: ChunkSource, @unchecked Sendable {
+public final class HashingChunkSource: ChunkSource, @unchecked Sendable {
 
     private let base: any ChunkSource
     private let hasher = TransferHasher()
@@ -18,13 +18,13 @@ final class HashingChunkSource: ChunkSource, @unchecked Sendable {
     private var coverageBroken = false
     private var didFinalize = false
 
-    init(base: any ChunkSource) {
+    public init(base: any ChunkSource) {
         self.base = base
     }
 
-    var totalSize: Int64 { base.totalSize }
+    public var totalSize: Int64 { base.totalSize }
 
-    func chunk(at offset: Int64, maxLength: Int64) async throws -> ChunkPayload? {
+    public func chunk(at offset: Int64, maxLength: Int64) async throws -> ChunkPayload? {
         guard let payload = try await base.chunk(
             at: offset,
             maxLength: maxLength
@@ -45,14 +45,14 @@ final class HashingChunkSource: ChunkSource, @unchecked Sendable {
         return payload
     }
 
-    func discard(_ payload: ChunkPayload) async {
+    public func discard(_ payload: ChunkPayload) async {
         await base.discard(payload)
     }
 
     /// Хеши всего файла, если покрытие полное.
     /// `nil` — передача началась не с нуля или оборвалась:
     /// хеш сравнивать нельзя.
-    func finalizeHashes() -> [ContentHash]? {
+    public func finalizeHashes() -> [ContentHash]? {
         guard !didFinalize, !coverageBroken,
               contiguousOffset == totalSize else {
             return nil

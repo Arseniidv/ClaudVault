@@ -18,6 +18,13 @@ final class DeviceTransferCoordinator {
     /// `onAppear`, и пользователь увидел бы устаревшую сессию.
     var onIncomingURL: (() -> Void)?
 
+    /// Вызывается после успешного QR-импорта токенов:
+    /// StoragesViewModel сбрасывает состояние провайдеров
+    /// и заново восстанавливает сессии — иначе импортированные
+    /// подключения были бы невидимы до перезапуска приложения
+    /// (restoreState уже выставлен при стартовом restore).
+    var onConnectionsRestored: (() -> Void)?
+
     func open() {
         isPresented = true
     }

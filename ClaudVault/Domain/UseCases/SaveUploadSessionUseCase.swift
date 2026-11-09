@@ -1,14 +1,14 @@
 import Foundation
 
 @MainActor
-final class SaveUploadSessionUseCase {
+public final class SaveUploadSessionUseCase {
     private let repository: UploadSessionRepository
 
-    init(repository: UploadSessionRepository) {
+    public init(repository: UploadSessionRepository) {
         self.repository = repository
     }
 
-    func execute(_ session: UploadSession) async throws {
+    public func execute(_ session: UploadSession) async throws {
         try await repository.save(session)
     }
 }

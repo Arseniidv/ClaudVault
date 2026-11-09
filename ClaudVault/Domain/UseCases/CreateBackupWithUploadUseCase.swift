@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class CreateBackupWithUploadUseCase {
+public final class CreateBackupWithUploadUseCase {
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
     /// Репозитории всех подключённых облаков — загрузка идёт
@@ -12,9 +12,9 @@ final class CreateBackupWithUploadUseCase {
     private let uploadSessionRepository: UploadSessionRepository
     private let saveUploadSessionUseCase: SaveUploadSessionUseCase
     private let updateUploadProgressUseCase: UpdateUploadProgressUseCase
-    var errorMessage:String? = nil
+    public var errorMessage:String? = nil
 
-    init(
+    public init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
         repositories: [StorageProviderType: CloudStorageRepository]? = nil,
@@ -49,7 +49,7 @@ final class CreateBackupWithUploadUseCase {
     /// - Если для `sourceIdentifier` уже есть запись и последняя версия
     ///   имеет тот же SHA-256 — новая копия не создаётся.
     /// - Прогресс передачи отражается в `UploadSession` (Active Transfers).
-    func execute(
+    public func execute(
         fileName: String,
         sourceIdentifier: String,
         fileURL: URL,
@@ -123,6 +123,9 @@ final class CreateBackupWithUploadUseCase {
 
         // Реальный прогресс по чанкам -> UploadSession.uploadedBytes.
         let sessionID = uploadSession.id
+        // Флаг отмены одноразовый: снимаем после завершения
+        // загрузки в любом исходе.
+        defer { UploadCancellation.clear(sessionID) }
         let updateProgress = updateUploadProgressUseCase
         let reporter = UploadProgressReporter { bytes in
             Task { @MainActor in
@@ -134,21 +137,37 @@ final class CreateBackupWithUploadUseCase {
             }
         }
 
+        // Провайдеры берут имя облачного файла из `lastPathComponent`
+        // URL. Если пользователь задал своё имя (актуально для сканов
+        // `scan_<UUID>.pdf`), подкладываем hard link/копию с этим именем.
+        let uploadURL = UploadFileNaming.url(for: fileURL, desiredName: fileName)
+
         let targetRepository = repository(for: storageProvider)
         let cloudFile: CloudFile
         do {
-            cloudFile = try await targetRepository.uploadFile(
-                at: fileURL,
-                parentFolderID: parentFolderID,
-                progressHandler: { fraction in
-                    reporter.report(fraction: fraction, totalBytes: fileSize)
+            // `sessionID` в TaskLocal: циклы провайдера проверяют
+            // флаг отмены из Live Activity на границе чанков.
+            cloudFile = try await UploadCancellation.$sessionID
+                .withValue(sessionID) {
+                    try await targetRepository.uploadFile(
+                        at: uploadURL,
+                        parentFolderID: parentFolderID,
+                        progressHandler: { fraction in
+                            reporter.report(
+                                fraction: fraction,
+                                totalBytes: fileSize
+                            )
+                        }
+                    )
                 }
-            )
         } catch {
+            let cancelled = Self.isCancellation(error)
             try? await updateUploadProgressUseCase.execute(id: sessionID, status: .failed)
             try? await updateUploadProgressUseCase.execute(
                 id: sessionID,
-                errorMessage: error.localizedDescription
+                errorMessage: cancelled
+                    ? "Загрузка отменена."
+                    : error.localizedDescription
             )
             throw error
         }
@@ -173,12 +192,22 @@ final class CreateBackupWithUploadUseCase {
         return updatedRecord
     }
 
-    enum BackupError: LocalizedError {
+    /// Отмена по флагу Live Activity (`CancellationError`) или
+    /// по отмене URLSession-задачи.
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        return false
+    }
+
+    public enum BackupError: LocalizedError {
         case fileSizeUnavailable
         case hashCalculationFailed
         case uploadFailed(String)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .fileSizeUnavailable:
                 return "Не удалось получить размер файла."

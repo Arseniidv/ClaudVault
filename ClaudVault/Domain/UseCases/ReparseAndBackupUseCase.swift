@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class ReparseAndBackupUseCase {
+public final class ReparseAndBackupUseCase {
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
     /// Репозитории всех облаков — новая версия грузится
@@ -13,7 +13,7 @@ final class ReparseAndBackupUseCase {
     private let saveUploadSessionUseCase: SaveUploadSessionUseCase
     private let updateUploadProgressUseCase: UpdateUploadProgressUseCase
 
-    init(
+    public init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
         repositories: [StorageProviderType: CloudStorageRepository]? = nil,
@@ -49,7 +49,7 @@ final class ReparseAndBackupUseCase {
     /// новую версию только если файл изменился.
     ///
     /// - Returns: новая `BackupVersion`, либо `nil` если файл не изменился.
-    func execute(
+    public func execute(
         record: BackupRecord,
         parentFolderID: String?,
         progressHandler: @escaping (Double) -> Void
@@ -77,7 +77,7 @@ final class ReparseAndBackupUseCase {
     }
 
     /// Вариант по идентификатору записи и прямому URL файла.
-    func execute(
+    public func execute(
         sourceIdentifier: String,
         fileURL: URL,
         parentFolderID: String?,
@@ -160,6 +160,7 @@ final class ReparseAndBackupUseCase {
         try await updateUploadProgressUseCase.execute(id: uploadSession.id, status: .uploading)
 
         let sessionID = uploadSession.id
+        defer { UploadCancellation.clear(sessionID) }
         let updateProgress = updateUploadProgressUseCase
         let reporter = UploadProgressReporter { bytes in
             Task { @MainActor in
@@ -171,20 +172,37 @@ final class ReparseAndBackupUseCase {
             }
         }
 
+        // Имя облачного файла — `record.fileName` (может отличаться
+        // от имени исходника: пользовательское имя или переименование).
+        let uploadURL = UploadFileNaming.url(
+            for: fileURL,
+            desiredName: record.fileName
+        )
+
         let cloudFile: CloudFile
         do {
-            cloudFile = try await repository(for: record).uploadFile(
-                at: fileURL,
-                parentFolderID: parentFolderID,
-                progressHandler: { fraction in
-                    reporter.report(fraction: fraction, totalBytes: fileSize)
+            cloudFile = try await UploadCancellation.$sessionID
+                .withValue(sessionID) {
+                    try await repository(for: record).uploadFile(
+                        at: uploadURL,
+                        parentFolderID: parentFolderID,
+                        progressHandler: { fraction in
+                            reporter.report(
+                                fraction: fraction,
+                                totalBytes: fileSize
+                            )
+                        }
+                    )
                 }
-            )
         } catch {
+            let cancelled = error is CancellationError
+                || (error as? URLError)?.code == .cancelled
             try? await updateUploadProgressUseCase.execute(id: sessionID, status: .failed)
             try? await updateUploadProgressUseCase.execute(
                 id: sessionID,
-                errorMessage: error.localizedDescription
+                errorMessage: cancelled
+                    ? "Загрузка отменена."
+                    : error.localizedDescription
             )
             throw error
         }
@@ -211,14 +229,14 @@ final class ReparseAndBackupUseCase {
         return version
     }
 
-    enum ReparseError: LocalizedError {
+    public enum ReparseError: LocalizedError {
         case recordNotFound
         case fileSizeUnavailable
         case hashCalculationFailed
         case uploadFailed(String)
         case fileAccessLost
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .recordNotFound:
                 return "Запись резервной копии не найдена."
