@@ -4,6 +4,7 @@ struct ActiveTransfersSectionView: View {
     let tasks: [SyncTask]
 
     var onPause: (SyncTask) -> Void = { _ in }
+    var onCancel: (SyncTask) -> Void = { _ in }
     var onDelete: (SyncTask) -> Void = { _ in }
 
     var activeTasks: [SyncTask] {
@@ -15,17 +16,21 @@ struct ActiveTransfersSectionView: View {
             HStack {
                 Text("Передаём сейчас")
                     .font(AppTypography.sectionTitle)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 Spacer()
             }
 
             Text("Новые копии · не влияют на актуальность облаков")
                 .font(.system(size: 12))
-                .foregroundStyle(Color.white.opacity(0.6))
+                .foregroundStyle(Color.primary.opacity(0.6))
 
             ForEach(activeTasks) { task in
-                SyncTaskCardView(task: task, onDelete: { onDelete(task) })
+                SyncTaskCardView(
+                    task: task,
+                    onDelete: { onDelete(task) },
+                    onCancel: { onCancel(task) }
+                )
             }
         }
     }

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -59,7 +60,15 @@ final class StoragesViewModel {
     private let otpService: OTPService?
     /// Кэш листингов папок в SwiftData. nil — кэш отключён (превью).
     private let fileCache: CloudFileCacheRepository?
+    /// Движок chunked-передач с журналом. nil — только
+    /// legacy-пути (превью, тесты).
+    private let transferEngine: TransferEngine?
     private var states: [StorageProviderType: ProviderState] = [:]
+
+    /// Задача текущего переноса — для отмены пользователем.
+    private var transferTask: Task<Void, Never>?
+    /// Задача текущей загрузки — для отмены пользователем.
+    private var uploadTask: Task<Void, Never>?
 
     /// Провайдер, выбранный в шите «Добавить хранилище».
     var selectedProvider: StorageProviderType = .googleDrive
@@ -141,12 +150,19 @@ final class StoragesViewModel {
         repositories: [StorageProviderType: CloudStorageRepository],
         biometricAuth: BiometricAuthService? = nil,
         otpService: OTPService? = nil,
-        fileCache: CloudFileCacheRepository? = nil
+        fileCache: CloudFileCacheRepository? = nil,
+        transferEngine: TransferEngine? = nil
     ) {
         self.repositories = repositories
         self.biometricAuth = biometricAuth
         self.otpService = otpService
         self.fileCache = fileCache
+        self.transferEngine = transferEngine
+        self.transferEngine?.onProgress = { [weak self] fraction in
+            Task { @MainActor in
+                self?.transferProgress = fraction
+            }
+        }
         loadRecentlyOpenedFiles()
         for kind in Self.supportedProviders where repositories[kind] != nil {
             states[kind] = ProviderState()
@@ -207,6 +223,19 @@ final class StoragesViewModel {
         // Публикуем итоговый снимок: если ни один аккаунт не подключён,
         // виджет получит пустой список и перестанет показывать старые данные.
         publishWidgetData()
+
+        // Подхватываем незавершённые передачи из журнала —
+        // только после восстановления сессий провайдеров,
+        // иначе запросы упадут с unauthorized.
+        if let transferEngine {
+            let repos = repositories
+            await transferEngine.resumePending { raw in
+                guard let kind = StorageProviderType(rawValue: raw) else {
+                    return nil
+                }
+                return repos[kind]
+            }
+        }
     }
 
     private func restoreConnection(for kind: StorageProviderType) async {
@@ -435,7 +464,23 @@ final class StoragesViewModel {
 
     // MARK: - Upload
 
+    /// MIME-тип файла по расширению (UTType → preferredMIMEType).
+    private static func mimeType(for url: URL) -> String {
+        guard let type = UTType(filenameExtension: url.pathExtension),
+              let mimeType = type.preferredMIMEType else {
+            return "application/octet-stream"
+        }
+        return mimeType
+    }
+
     func upload(fileURL: URL) async {
+        let task = Task { await self.performUpload(fileURL: fileURL) }
+        uploadTask = task
+        await task.value
+        uploadTask = nil
+    }
+
+    private func performUpload(fileURL: URL) async {
         let kind = selectedProvider
 
         // URL из fileImporter может быть security-scoped.
@@ -446,15 +491,45 @@ final class StoragesViewModel {
             }
         }
 
+        isTransferRunning = true
+        transferFileName = fileURL.lastPathComponent
+        transferProgress = 0
+        defer {
+            isTransferRunning = false
+            transferProgress = 0
+            transferFileName = nil
+        }
+
         await perform(for: kind) { [self] in
             guard let repository = repositories[kind] else { return }
             let parentID = states[kind]?.currentFolder?.id
-            let uploaded = try await repository.uploadFile(
-                at: fileURL,
-                parentFolderID: parentID,
-                progressHandler: nil
-            )
 
+            var uploaded: CloudFile?
+            // Сначала chunked-загрузка через TransferEngine:
+            // resumable-сессия + журнал + возобновление.
+            if let engine = transferEngine {
+                do {
+                    uploaded = try await engine.uploadFile(
+                        fileURL: fileURL,
+                        name: fileURL.lastPathComponent,
+                        mimeType: Self.mimeType(for: fileURL),
+                        targetProvider: kind.rawValue,
+                        target: repository,
+                        parentFolderID: parentID
+                    )
+                } catch CloudStorageError.notImplemented {
+                    uploaded = nil
+                }
+            }
+            if uploaded == nil {
+                uploaded = try await repository.uploadFile(
+                    at: fileURL,
+                    parentFolderID: parentID,
+                    progressHandler: nil
+                )
+            }
+
+            guard let uploaded else { return }
             states[kind]?.successMessage = "Файл «\(uploaded.name)» загружен."
             let files = try await repository.listFiles(parentFolderID: parentID)
             states[kind]?.files = files
@@ -767,6 +842,34 @@ final class StoragesViewModel {
         to target: StorageProviderType,
         move: Bool
     ) async {
+        let task = Task {
+            await self.performTransferItem(
+                file,
+                from: source,
+                to: target,
+                move: move
+            )
+        }
+        transferTask = task
+        await task.value
+        transferTask = nil
+    }
+
+    /// Отменяет текущий перенос/загрузку: задача останавливается
+    /// через `Task.checkCancellation` в цикле движка, запись
+    /// журнала помечается `.cancelled`.
+    func cancelTransfer() {
+        transferTask?.cancel()
+        uploadTask?.cancel()
+        Task { await transferEngine?.cancelActive() }
+    }
+
+    private func performTransferItem(
+        _ file: CloudFile,
+        from source: StorageProviderType,
+        to target: StorageProviderType,
+        move: Bool
+    ) async {
         guard source != target,
               let sourceRepo = repositories[source],
               let targetRepo = repositories[target],
@@ -848,24 +951,29 @@ final class StoragesViewModel {
             return
         }
 
-        // Файл: сначала пробуем chunked-трансфер «на лету»
-        // (источник → Range-запросы → цель чанками, без файла на диске).
-        // Если провайдер не поддерживает — fallback на temp-файл.
+        // Файл: основной путь — TransferEngine (Range-скачивание
+        // в temp-файлы → resumable-сессия приёмника → журнал,
+        // верификация размера и безопасный move). Если провайдер
+        // не поддерживает сессии — legacy-путь через temp-файл.
         transferFileName = file.name
         transferProgress = 0
 
-        if let sizeBytes = file.sizeBytes, sizeBytes >= 0,
-           (try? await transferFileStreamed(
-               file,
-               sourceRepo: sourceRepo,
-               targetRepo: targetRepo,
-               targetParentID: targetParentID,
-               sizeBytes: sizeBytes
-           )) == true {
-            if move {
-                try await sourceRepo.deleteFile(id: file.id)
+        if let engine = transferEngine {
+            do {
+                _ = try await engine.transferFile(
+                    file,
+                    from: source.rawValue,
+                    source: sourceRepo,
+                    to: target.rawValue,
+                    target: targetRepo,
+                    targetParentID: targetParentID,
+                    move: move
+                )
+                return
+            } catch CloudStorageError.notImplemented {
+                // Нет makeChunkSource/makeUploadSession —
+                // переходим на fallback ниже.
             }
-            return
         }
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -881,7 +989,7 @@ final class StoragesViewModel {
         try await sourceRepo.downloadFile(id: file.id, to: localURL, progressHandler: nil)
         transferProgress = 0
 
-        _ = try await targetRepo.uploadFile(
+        let uploaded = try await targetRepo.uploadFile(
             at: localURL,
             parentFolderID: targetParentID
         ) { [weak self] fraction in
@@ -892,49 +1000,15 @@ final class StoragesViewModel {
         }
 
         if move {
+            // Источник удаляем только после проверки размера
+            // у приёмника.
+            let meta = try await targetRepo.fileMetadata(id: uploaded.id)
+            guard meta.sizeBytes == file.sizeBytes else {
+                throw CloudStorageError.operationFailed(
+                    "Размер загруженного файла не совпадает с источником."
+                )
+            }
             try await sourceRepo.deleteFile(id: file.id)
-        }
-    }
-
-    /// Chunked-трансфер файла без записи на диск.
-    /// Возвращает false, если провайдеры не поддерживают стриминг
-    /// (тогда вызывающий код использует путь через temp-файл).
-    private func transferFileStreamed(
-        _ file: CloudFile,
-        sourceRepo: CloudStorageRepository,
-        targetRepo: CloudStorageRepository,
-        targetParentID: String?,
-        sizeBytes: Int64
-    ) async throws -> Bool {
-        do {
-            let descriptor = try await sourceRepo.streamDescriptor(for: file)
-            let reader = HTTPChunkReader(
-                url: descriptor.url,
-                headers: descriptor.headers,
-                totalSize: sizeBytes
-            )
-
-            _ = try await targetRepo.uploadStreamedFile(
-                name: file.name,
-                mimeType: file.mimeType,
-                parentFolderID: targetParentID,
-                sizeBytes: sizeBytes,
-                readChunk: { try await reader.nextChunk() },
-                progressHandler: { [weak self] fraction in
-                    guard let self else { return }
-                    Task { @MainActor in
-                        self.transferProgress = fraction
-                    }
-                }
-            )
-            return true
-        } catch CloudStorageError.notImplemented {
-            return false
-        } catch {
-            // Ошибка внутри стриминга — пробрасываем как обычную ошибку
-            // переноса, а не молча откатываемся (файл может быть
-            // частично загружен).
-            throw error
         }
     }
 

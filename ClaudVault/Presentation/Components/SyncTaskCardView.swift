@@ -4,6 +4,8 @@ struct SyncTaskCardView: View {
 
     let task: SyncTask
     var onDelete: (() -> Void)? = nil
+    /// Отмена идущей загрузки (только для `.transferring`).
+    var onCancel: (() -> Void)? = nil
 
     private var progressPercentage: Int {
         Int(min(max(task.progress, 0), 1) * 100)
@@ -33,16 +35,26 @@ struct SyncTaskCardView: View {
 
                 Text(task.fileName)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
                     .lineLimit(1)
 
                 Spacer()
+
+                if task.status == .transferring, let onCancel {
+                    Button(action: onCancel) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.red.opacity(0.85))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Отменить загрузку")
+                }
 
                 if let onDelete {
                     Button(action: onDelete) {
                         Image(systemName: "trash")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(.primary.opacity(0.55))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Удалить из истории")
@@ -58,14 +70,14 @@ struct SyncTaskCardView: View {
             HStack {
                 Text("\(task.source) → \(task.destination)")
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.primary.opacity(0.6))
                     .lineLimit(1)
 
                 Spacer()
 
                 Image(systemName: "pause.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(.primary.opacity(0.65))
             }
 
             // MARK: - Progress
@@ -74,7 +86,7 @@ struct SyncTaskCardView: View {
                 ZStack(alignment: .leading) {
 
                     Capsule()
-                        .fill(Color.white.opacity(0.08))
+                        .fill(Color.primary.opacity(0.08))
 
                     Capsule()
                         .fill(Color.blue)
@@ -91,25 +103,30 @@ struct SyncTaskCardView: View {
             HStack {
                 Text("\(formattedTransferredSize) / \(formattedTotalSize) МБ · \(formattedSpeed) МБ/с")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(.primary.opacity(0.65))
 
                 Spacer()
 
                 Text("≈ \(task.remainingTime)")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(.primary.opacity(0.65))
             }
         }
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 24)
-                .fill(Color.white.opacity(0.035))
+                .fill(Color.primary.opacity(0.035))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .contextMenu {
+            if task.status == .transferring, let onCancel {
+                Button(action: onCancel) {
+                    Label("Отменить загрузку", systemImage: "xmark.circle")
+                }
+            }
             if let onDelete {
                 Button(role: .destructive, action: onDelete) {
                     Label("Удалить", systemImage: "trash")

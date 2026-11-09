@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 @MainActor
 struct BackupListView: View {
@@ -9,9 +10,30 @@ struct BackupListView: View {
     @State private var searchText = ""
     @State private var selectedSort: RecentFilesView.SortOption = .latest
     @State private var selectedProvider: StorageProviderType? = nil
+    /// Внешний фильтр облака (macOS: выбор в боковой панели).
+    /// Если задан — заменяет внутренний `selectedProvider`.
+    private let externalProviderFilter: Binding<StorageProviderType?>?
+    /// Роутер навигации по разделам (нужен macOS-меню «+»
+    /// для перехода к подключению облака).
+    private let navigationRouter: AppNavigationRouter?
     @State private var selectedRecord: BackupRecord?
     @State private var previewFileURL: URL?
     @State private var isDownloadingPreview = false
+    /// Файл из облака, открытый в типизированном предпросмотре
+    /// по long press (не путать с `previewFileURL` — QuickLook).
+    @State private var previewItem: FilePreviewItem?
+    /// macOS: состояние таблицы файлов.
+    #if os(macOS)
+    @State private var tableSortOrder = [
+        KeyPathComparator(\BackupTableRow.record.updatedAt, order: .reverse)
+    ]
+    @State private var tableSelection = Set<UUID>()
+    #endif
+    /// fileImporter для «Загрузить папку…».
+    @State private var isFolderImporterPresented = false
+    /// Алерт «Новая папка» из меню «+».
+    @State private var isNewFolderAlertPresented = false
+    @State private var newFolderName = ""
 
     private let fileAccessRepository: FileAccessRepository
     private let fileHasher: FileHashing
@@ -19,6 +41,8 @@ struct BackupListView: View {
     private let createBackupWithUpload: CreateBackupWithUploadUseCase
     private let deleteBackupUseCase: DeleteBackupUseCase
     private let reparseAndBackupUseCase: ReparseAndBackupUseCase
+    private let transferBackupToProvider: TransferBackupToProviderUseCase?
+    private let renameBackupUseCase: RenameBackupUseCase?
     private let fetchBackupVersions: FetchBackupVersionsUseCase
     /// Роутер deep link'ов виджета (`claudvault://backup/new?mode=…`).
     private let actionRouter: BackupActionRouter?
@@ -45,8 +69,12 @@ struct BackupListView: View {
         createBackupWithUpload: CreateBackupWithUploadUseCase,
         deleteBackupUseCase: DeleteBackupUseCase,
         reparseAndBackupUseCase: ReparseAndBackupUseCase,
+        transferBackupToProvider: TransferBackupToProviderUseCase? = nil,
+        renameBackupUseCase: RenameBackupUseCase? = nil,
         fetchBackupVersions: FetchBackupVersionsUseCase,
-        actionRouter: BackupActionRouter? = nil
+        actionRouter: BackupActionRouter? = nil,
+        providerFilter: Binding<StorageProviderType?>? = nil,
+        navigationRouter: AppNavigationRouter? = nil
     ) {
         let listViewModel = BackupListViewModel(
             fetchBackupRecords: fetchBackupRecords,
@@ -64,11 +92,35 @@ struct BackupListView: View {
         self.createBackupWithUpload = createBackupWithUpload
         self.deleteBackupUseCase = deleteBackupUseCase
         self.reparseAndBackupUseCase = reparseAndBackupUseCase
+        self.transferBackupToProvider = transferBackupToProvider
+        self.renameBackupUseCase = renameBackupUseCase
         self.fetchBackupVersions = fetchBackupVersions
         self.actionRouter = actionRouter
+        self.externalProviderFilter = providerFilter
+        self.navigationRouter = navigationRouter
     }
 
     // MARK: - Computed Properties
+
+    /// Привязка фильтра облака: внешняя (macOS-сайдбар)
+    /// или внутренняя (чипы на iOS/macOS).
+    private var providerSelection: Binding<StorageProviderType?> {
+        externalProviderFilter ?? $selectedProvider
+    }
+
+    /// Текущее значение фильтра облака.
+    private var activeProviderFilter: StorageProviderType? {
+        providerSelection.wrappedValue
+    }
+
+    /// Провайдер для операций «Загрузить папку…»/«Новая папка»:
+    /// фильтр сайдбара → первое подключённое облако → текущий
+    /// выбранный провайдер VM.
+    private var cloudTargetProvider: StorageProviderType {
+        activeProviderFilter
+            ?? storagesViewModel.connectedProviders.first
+            ?? storagesViewModel.selectedProvider
+    }
 
     /// Подключённые облачные провайдеры с реальным usage — как на экране «Хранилища».
     private var providers: [StorageProvider] {
@@ -78,7 +130,7 @@ struct BackupListView: View {
     /// Провайдеры, попадающие под текущий фильтр чипсов.
     private var visibleProviders: [StorageProvider] {
         providers.filter {
-            selectedProvider == nil || $0.provider == selectedProvider
+            activeProviderFilter == nil || $0.provider == activeProviderFilter
         }
     }
 
@@ -95,8 +147,11 @@ struct BackupListView: View {
     // MARK: - Body
     var body: some View {
         NavigationStack {
+            #if os(macOS)
+            macOSContent
+            #else
             ZStack(alignment: .bottomTrailing) {
-                Color(red: 0.035, green: 0.047, blue: 0.075)
+                AppColors.background
                     .ignoresSafeArea()
 
                 ScrollView {
@@ -106,7 +161,7 @@ struct BackupListView: View {
                         SearchSectionView(searchText: $searchText)
 
                         FilterSelectorView(
-                            selectedProvider: $selectedProvider,
+                            selectedProvider: providerSelection,
                             providers: storagesViewModel.connectedProviders
                         )
 
@@ -115,7 +170,7 @@ struct BackupListView: View {
                         }
 
                         StorageOverviewView(
-                            providers: providers,
+                            providers: visibleProviders,
                             usedStorage: usedStorage,
                             totalStorage: totalStorage,
                             backupVersionsBytes: viewModel.usedStorageBytes,
@@ -129,7 +184,7 @@ struct BackupListView: View {
                             records: viewModel.records,
                             searchText: searchText,
                             selectedSort: selectedSort,
-                            providerFilter: selectedProvider,
+                            providerFilter: activeProviderFilter,
                             onFileTap: { record in
                                 selectedRecord = record
                             },
@@ -154,111 +209,78 @@ struct BackupListView: View {
                     scanAction: { isScannerPresented = true }
                 )
             }
-            #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
             #endif
-            .task {
-                viewModel.onDataChanged = { [storagesViewModel, viewModel] in
-                    viewModel.loadRecords()
-                    Task { await storagesViewModel.loadStorageUsage() }
-                }
-                viewModel.loadRecords()
-                Task { await storagesViewModel.loadStorageUsage() }
-                consumePendingBackupRequest()
+        }
+        .task {
+            wireDataChangedHandler()
+            viewModel.loadRecords()
+            await storagesViewModel.loadStorageUsage()
+            consumePendingBackupRequest()
+        }
+        // Deep link из виджета может прийти и после появления view.
+        .onChange(of: actionRouter?.pendingRequest) { _, _ in
+            consumePendingBackupRequest()
+        }
+        // Глобальный поиск по всем подключённым облакам с дебаунсом.
+        .task(id: searchText) {
+            let query = searchText
+            guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                storagesViewModel.clearCloudSearch()
+                return
             }
-            // Deep link из виджета может прийти и после появления view.
-            .onChange(of: actionRouter?.pendingRequest) { _, _ in
-                consumePendingBackupRequest()
-            }
-            // Глобальный поиск по всем подключённым облакам с дебаунсом.
-            .task(id: searchText) {
-                let query = searchText
-                guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    storagesViewModel.clearCloudSearch()
-                    return
-                }
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                guard !Task.isCancelled else { return }
-                await storagesViewModel.searchCloudFiles(query: query)
-            }
-            .navigationDestination(for: CloudFolderRoute.self) { route in
-                CloudFolderBrowserView(
-                    provider: route.provider,
-                    route: route,
-                    storagesViewModel: storagesViewModel
-                )
-            }
-            #if os(iOS)
-            .sheet(isPresented: $isScannerPresented, onDismiss: {
-                // После закрытия сканера открываем создание бэкапа
-                // с готовым PDF-сканом.
-                if let url = pendingScannedPDFURL {
-                    pendingScannedPDFURL = nil
-                    scannedDocument = ScannedDocument(fileURL: url)
-                }
-            }) {
-                DocumentScannerView(
-                    onScanComplete: { url in
-                        pendingScannedPDFURL = url
-                        isScannerPresented = false
-                    },
-                    onCancel: {
-                        isScannerPresented = false
-                    },
-                    onError: { error in
-                        viewModel.errorMessage = error.localizedDescription
-                        isScannerPresented = false
-                    }
-                )
-            }
-            #endif
-            .sheet(isPresented: $isCreateBackupPresented, onDismiss: {
-                pendingAutoOpenImporter = false
-            }) {
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            guard !Task.isCancelled else { return }
+            await storagesViewModel.searchCloudFiles(query: query)
+        }
+        .navigationDestination(for: CloudFolderRoute.self) { route in
+            CloudFolderBrowserView(
+                provider: route.provider,
+                route: route,
+                storagesViewModel: storagesViewModel
+            )
+        }
+        // «Загрузить папку…» и «Новая папка» из меню «+».
+        .modifier(FolderActionsModifier(
+            isFolderImporterPresented: $isFolderImporterPresented,
+            isNewFolderAlertPresented: $isNewFolderAlertPresented,
+            newFolderName: $newFolderName,
+            storagesViewModel: storagesViewModel,
+            cloudTargetProvider: cloudTargetProvider
+        ))
+        // Sheets и alert вынесены в модификатор — иначе
+        // цепочка модификаторов не проходит type-check.
+        .modifier(BackupSheetsModifier(
+            isScannerPresented: $isScannerPresented,
+            pendingScannedPDFURL: $pendingScannedPDFURL,
+            scannedDocument: $scannedDocument,
+            isCreateBackupPresented: $isCreateBackupPresented,
+            pendingAutoOpenImporter: $pendingAutoOpenImporter,
+            selectedRecord: $selectedRecord,
+            previewFileURL: $previewFileURL,
+            previewItem: $previewItem,
+            errorMessage: Binding(
+                get: { viewModel.errorMessage },
+                set: { viewModel.errorMessage = $0 }
+            ),
+            storagesViewModel: storagesViewModel,
+            makeDetailViewModel: makeDetailViewModel,
+            createBackupView: { url, autoOpen in
                 createBackupView(
-                    initialFileURL: nil,
-                    autoOpenImporter: pendingAutoOpenImporter
+                    initialFileURL: url,
+                    autoOpenImporter: autoOpen
                 )
             }
-            .sheet(item: $scannedDocument) { document in
-                createBackupView(initialFileURL: document.fileURL)
-            }
-            .sheet(item: $selectedRecord) { record in
-                BackupRecordDetailView(
-                    viewModel: makeDetailViewModel(for: record)
-                )
-            }
-            .sheet(isPresented: Binding(
-                get: { previewFileURL != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        // Удаляем временную копию после закрытия просмотра.
-                        if let url = previewFileURL {
-                            try? FileManager.default.removeItem(
-                                at: url.deletingLastPathComponent()
-                            )
-                        }
-                        previewFileURL = nil
-                    }
-                }
-            )) {
-                if let url = previewFileURL {
-                    QuickLookPreview(url: url)
-                }
-            }
-            .alert(
-                "Ошибка",
-                isPresented: Binding(
-                    get: { viewModel.errorMessage != nil },
-                    set: { if !$0 { viewModel.errorMessage = nil } }
-                )
-            ) {
-                Button("OK", role: .cancel) {
-                    viewModel.errorMessage = nil
-                }
-            } message: {
-                Text(viewModel.errorMessage ?? "")
-            }
+        ))
+    }
+
+    /// Подписывает список записей на изменения: перезагружает
+    /// записи и статистику облаков. Вынесено из `.task`,
+    /// чтобы не перегружать type-checker модификаторов.
+    private func wireDataChangedHandler() {
+        viewModel.onDataChanged = { [storagesViewModel, viewModel] in
+            viewModel.loadRecords()
+            Task { await storagesViewModel.loadStorageUsage() }
         }
     }
 
@@ -276,25 +298,29 @@ struct BackupListView: View {
             isCreateBackupPresented = true
         case .scanDocument:
             isScannerPresented = true
+        case .pickFolder:
+            isFolderImporterPresented = true
+        case .newFolder:
+            isNewFolderAlertPresented = true
+        case .connectCloud(let provider):
+            // Подключение облака живёт на экране «Хранилища»:
+            // просим VM открыть шит и переключаем раздел.
+            storagesViewModel.selectedProvider = provider
+            storagesViewModel.requestConnect(provider: provider)
+            navigationRouter?.request(.storages, provider: provider)
         }
-    }
-
-    /// Идентифицируемая обёртка для PDF из сканера — нужна для
-    /// `sheet(item:)`, чтобы content-геттер всегда получал актуальный URL.
-    private struct ScannedDocument: Identifiable {
-        let id = UUID()
-        let fileURL: URL
     }
 
     @ViewBuilder
     private func createBackupView(
         initialFileURL: URL?,
         autoOpenImporter: Bool = false
-    ) -> some View {
+    ) -> CreateBackupView {
         CreateBackupView(
             fileAccessRepository: fileAccessRepository,
             fileHasher: fileHasher,
             createBackupWithUpload: createBackupWithUpload,
+            availableProviders: storagesViewModel.connectedProviders,
             initialFileURL: initialFileURL,
             autoOpenImporter: autoOpenImporter,
             onCreated: {
@@ -310,6 +336,9 @@ struct BackupListView: View {
             fetchBackupVersions: fetchBackupVersions,
             deleteBackupUseCase: deleteBackupUseCase,
             reparseAndBackupUseCase: reparseAndBackupUseCase,
+            transferBackupToProvider: transferBackupToProvider,
+            renameBackupUseCase: renameBackupUseCase,
+            transferTargets: storagesViewModel.connectedProviders,
             backupMetadataRepository: backupMetadataRepository
         )
         detailViewModel.onDataChanged = { [storagesViewModel] in
@@ -328,11 +357,11 @@ struct BackupListView: View {
             HStack(spacing: 8) {
                 Text("Файлы в облаке")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 if storagesViewModel.isCloudSearchRunning {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.textPrimary)
                         .scaleEffect(0.7)
                 }
             }
@@ -341,7 +370,7 @@ struct BackupListView: View {
                 && !storagesViewModel.isCloudSearchRunning {
                 Text("Ничего не найдено в подключённых хранилищах.")
                     .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 8)
             } else {
@@ -372,6 +401,13 @@ struct BackupListView: View {
                 cloudResultRowContent(result, icon: "doc.fill", tint: result.provider.tint)
             }
             .buttonStyle(.plain)
+            // Long press — типизированный предпросмотр; тап — QuickLook.
+            .onLongPressGesture(minimumDuration: 0.5) {
+                previewItem = FilePreviewItem(
+                    provider: result.provider,
+                    file: result.file
+                )
+            }
         }
     }
 
@@ -385,13 +421,13 @@ struct BackupListView: View {
                 .font(.system(size: 15))
                 .foregroundStyle(tint)
                     .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.06))
+                    .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(result.file.name)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: 5) {
@@ -401,20 +437,20 @@ struct BackupListView: View {
 
                         Text(result.provider.name)
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(.primary.opacity(0.55))
                     }
                 }
 
                 Spacer()
 
                 if let size = result.file.sizeBytes {
-                    Text(Self.cloudByteFormatter.string(fromByteCount: size))
+                    Text(ByteFormatting.string(fromByteCount: size))
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.primary.opacity(0.45))
                 }
             }
             .padding(10)
-            .background(Color.white.opacity(0.04))
+            .background(Color.primary.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -445,13 +481,13 @@ struct BackupListView: View {
     /// показываются только файлы этого провайдера.
     @ViewBuilder
     private var recentlyOpenedSection: some View {
-        let items = storagesViewModel.openedFiles(for: selectedProvider)
+        let items = storagesViewModel.openedFiles(for: activeProviderFilter)
 
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
                 Text("Последние открытые")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppColors.textPrimary)
 
                 ForEach(items) { opened in
                     openedFileRow(opened)
@@ -469,13 +505,13 @@ struct BackupListView: View {
                     .font(.system(size: 15))
                     .foregroundStyle(opened.provider.tint)
                     .frame(width: 34, height: 34)
-                    .background(Color.white.opacity(0.06))
+                    .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(opened.file.name)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(1)
 
                     HStack(spacing: 5) {
@@ -485,28 +521,35 @@ struct BackupListView: View {
 
                         Text(opened.provider.name)
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(.primary.opacity(0.55))
 
                         Text("·")
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.35))
+                            .foregroundStyle(.primary.opacity(0.35))
 
                         Text(opened.openedAt.formatted(
                             date: .abbreviated,
                             time: .shortened
                         ))
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.primary.opacity(0.45))
                     }
                 }
 
                 Spacer()
             }
             .padding(10)
-            .background(Color.white.opacity(0.04))
+            .background(Color.primary.opacity(0.04))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        // Long press — типизированный предпросмотр; тап — QuickLook.
+        .onLongPressGesture(minimumDuration: 0.5) {
+            previewItem = FilePreviewItem(
+                provider: opened.provider,
+                file: opened.file
+            )
+        }
     }
 
     /// Тап по файлу из «Последних открытых»: скачивание
@@ -527,11 +570,6 @@ struct BackupListView: View {
         }
     }
 
-    private static let cloudByteFormatter: ByteCountFormatter = {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter
-    }()
 
     // MARK: - Backup List
     private var backupList: some View {
@@ -590,6 +628,360 @@ struct BackupListView: View {
     }
 }
 
+// MARK: - macOS
+
+#if os(macOS)
+extension BackupListView {
+
+    /// Раскладка macOS: таблица файлов на всю ширину,
+    /// карточка хранилища и «последние открытые» — в правой
+    /// колонке, поиск — в тулбаре через `.searchable`.
+    var macOSContent: some View {
+        HSplitView {
+            VStack(spacing: 0) {
+                FilterSelectorView(
+                    selectedProvider: providerSelection,
+                    providers: storagesViewModel.connectedProviders
+                )
+                .padding(.horizontal, AppSpacing.screenHorizontal)
+                .padding(.top, AppSpacing.sm)
+
+                if !searchText.isEmpty {
+                    ScrollView {
+                        cloudSearchSection
+                            .padding(.horizontal, AppSpacing.screenHorizontal)
+                            .padding(.vertical, AppSpacing.sm)
+                    }
+                    .frame(maxHeight: 240)
+                }
+
+                filesTable
+            }
+            .frame(minWidth: 480, idealWidth: 640)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: AppSpacing.lg) {
+                    StorageOverviewView(
+                        providers: visibleProviders,
+                        usedStorage: usedStorage,
+                        totalStorage: totalStorage,
+                        backupVersionsBytes: viewModel.usedStorageBytes,
+                        localFilesBytes: viewModel.localFilesBytes,
+                        localFilesCount: viewModel.localFilesCount
+                    )
+
+                    recentlyOpenedSection
+
+                    FooterSectionView(
+                        connectedClouds: providers.count,
+                        totalFiles: viewModel.records.count
+                    )
+                }
+                .padding(AppSpacing.md)
+            }
+            .frame(minWidth: 240, idealWidth: 290, maxWidth: 340)
+        }
+        .navigationTitle("Файлы")
+        .searchable(text: $searchText, placement: .toolbar)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                addMenu
+            }
+        }
+    }
+
+    /// Меню «+» в тулбаре окна — macOS-аналог плавающей
+    /// кнопки на iOS. Те же команды доступны в меню «Файл»
+    /// и через `BackupActionRouter`.
+    private var addMenu: some View {
+        Menu {
+            Button("Загрузить файлы…") {
+                requestBackup(.pickFile)
+            }
+            .keyboardShortcut("u", modifiers: .command)
+
+            Button("Загрузить папку…") {
+                requestBackup(.pickFolder)
+            }
+
+            Button("Новая папка") {
+                requestBackup(.newFolder)
+            }
+            .keyboardShortcut("n", modifiers: [.command, .shift])
+
+            Divider()
+
+            Menu("Добавить облако") {
+                ForEach(connectableProviders, id: \.self) { kind in
+                    Button(kind.name) {
+                        requestBackup(.connectCloud(kind))
+                    }
+                }
+            }
+        } label: {
+            Label("Добавить", systemImage: "plus")
+        }
+        .help("Добавить файлы или облако")
+    }
+
+    /// Провайдеры, которых ещё нет среди подключённых —
+    /// кандидаты для «Добавить облако…».
+    private var connectableProviders: [StorageProviderType] {
+        let connected = Set(storagesViewModel.connectedProviders)
+        return storagesViewModel.availableProviders.filter {
+            !connected.contains($0)
+        }
+    }
+
+    private func requestBackup(_ request: BackupCreationRequest) {
+        actionRouter?.request(request)
+    }
+
+    /// Строки таблицы: записи, отфильтрованные облаком
+    /// и поисковым запросом (как `RecentFilesView` на iOS).
+    private var tableRows: [BackupTableRow] {
+        viewModel.records
+            .filter { record in
+                (activeProviderFilter == nil
+                    || record.storageProvider == activeProviderFilter)
+                    && (searchText.isEmpty
+                        || record.fileName
+                            .localizedCaseInsensitiveContains(searchText))
+            }
+            .map {
+                BackupTableRow(
+                    record: $0,
+                    sizeBytes: viewModel.recordSizes[$0.id]
+                )
+            }
+    }
+
+    private var filesTable: some View {
+        MacBackupTable(
+            rows: tableRows,
+            sortOrder: $tableSortOrder,
+            selection: $tableSelection,
+            isLoading: viewModel.isLoading,
+            loadFailed: viewModel.errorMessage != nil,
+            searchQuery: searchText,
+            providerFilterActive: activeProviderFilter != nil,
+            filterProviderConnected: activeProviderFilter.map {
+                storagesViewModel.connectedProviders.contains($0)
+            } ?? true,
+            onOpen: { record in
+                selectedRecord = record
+            },
+            onDelete: { record in
+                Task { await viewModel.deleteRecord(record: record) }
+            },
+            onQuickLook: { record in
+                Task { await previewRecord(record) }
+            },
+            onCreate: {
+                pendingAutoOpenImporter = true
+                isCreateBackupPresented = true
+            },
+            onRetry: {
+                viewModel.loadRecords()
+            }
+        )
+    }
+
+    /// Быстрый просмотр записи бэкапа: скачивает последнюю
+    /// версию из облака во временный кэш и показывает QuickLook.
+    private func previewRecord(_ record: BackupRecord) async {
+        guard !isDownloadingPreview else { return }
+
+        let provider = record.storageProvider
+        guard storagesViewModel.connectedProviders.contains(provider),
+              let version = viewModel.latestVersion(for: record.id)
+        else {
+            viewModel.errorMessage =
+                "Не удалось подготовить файл для просмотра."
+            return
+        }
+
+        isDownloadingPreview = true
+        defer { isDownloadingPreview = false }
+
+        let ext = URL(fileURLWithPath: record.fileName).pathExtension
+        let mimeType = UTType(filenameExtension: ext)?
+            .preferredMIMEType ?? "application/octet-stream"
+        let cloudFile = CloudFile(
+            id: version.cloudObjectID,
+            name: record.fileName,
+            mimeType: mimeType,
+            sizeBytes: version.fileSize,
+            modifiedAt: version.uploadedAt
+        )
+
+        do {
+            previewFileURL = try await storagesViewModel
+                .downloadForPreview(cloudFile, provider: provider)
+        } catch {
+            viewModel.errorMessage = error.localizedDescription
+        }
+    }
+}
+#endif
+
+// MARK: - Sheets & Alerts
+
+/// Идентифицируемая обёртка для PDF из сканера — нужна для
+/// `sheet(item:)`, чтобы content-геттер всегда получал актуальный URL.
+struct ScannedDocument: Identifiable {
+    let id = UUID()
+    let fileURL: URL
+}
+
+/// Все sheet'ы и alert списка бэкапов — вынесены из `body`,
+/// чтобы не перегружать type-checker цепочки модификаторов.
+struct BackupSheetsModifier: ViewModifier {
+    @Binding var isScannerPresented: Bool
+    @Binding var pendingScannedPDFURL: URL?
+    @Binding var scannedDocument: ScannedDocument?
+    @Binding var isCreateBackupPresented: Bool
+    @Binding var pendingAutoOpenImporter: Bool
+    @Binding var selectedRecord: BackupRecord?
+    @Binding var previewFileURL: URL?
+    @Binding var previewItem: FilePreviewItem?
+    let errorMessage: Binding<String?>
+    let storagesViewModel: StoragesViewModel
+    let makeDetailViewModel: (BackupRecord) -> BackupVersionsViewModel
+    let createBackupView: (URL?, Bool) -> CreateBackupView
+
+    func body(content: Content) -> some View {
+        content
+            #if os(iOS)
+            .sheet(isPresented: $isScannerPresented, onDismiss: {
+                // После закрытия сканера открываем создание бэкапа
+                // с готовым PDF-сканом.
+                if let url = pendingScannedPDFURL {
+                    pendingScannedPDFURL = nil
+                    scannedDocument = ScannedDocument(fileURL: url)
+                }
+            }) {
+                DocumentScannerView(
+                    onScanComplete: { url in
+                        pendingScannedPDFURL = url
+                        isScannerPresented = false
+                    },
+                    onCancel: {
+                        isScannerPresented = false
+                    },
+                    onError: { error in
+                        errorMessage.wrappedValue = error.localizedDescription
+                        isScannerPresented = false
+                    }
+                )
+            }
+            #endif
+            .sheet(isPresented: $isCreateBackupPresented, onDismiss: {
+                pendingAutoOpenImporter = false
+            }) {
+                createBackupView(nil, pendingAutoOpenImporter)
+            }
+            .sheet(item: $scannedDocument) { document in
+                createBackupView(document.fileURL, false)
+            }
+            .sheet(item: $selectedRecord) { record in
+                BackupRecordDetailView(
+                    viewModel: makeDetailViewModel(record)
+                )
+            }
+            .sheet(isPresented: Binding(
+                get: { previewFileURL != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        // Удаляем временную копию после закрытия просмотра.
+                        if let url = previewFileURL {
+                            try? FileManager.default.removeItem(
+                                at: url.deletingLastPathComponent()
+                            )
+                        }
+                        previewFileURL = nil
+                    }
+                }
+            )) {
+                if let url = previewFileURL {
+                    QuickLookPreview(url: url)
+                }
+            }
+            .sheet(item: $previewItem) { item in
+                FilePreviewView(item: item, storagesViewModel: storagesViewModel)
+            }
+            .alert(
+                "Ошибка",
+                isPresented: Binding(
+                    get: { errorMessage.wrappedValue != nil },
+                    set: { if !$0 { errorMessage.wrappedValue = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {
+                    errorMessage.wrappedValue = nil
+                }
+            } message: {
+                Text(errorMessage.wrappedValue ?? "")
+            }
+    }
+}
+
+// MARK: - Folder Actions
+
+/// «Загрузить папку…» (fileImporter → рекурсивная загрузка
+/// в облако) и алерт «Новая папка» — команды меню «+».
+/// Вынесено в модификатор, чтобы не перегружать цепочку
+/// модификаторов `body` (type-check timeout).
+struct FolderActionsModifier: ViewModifier {
+    @Binding var isFolderImporterPresented: Bool
+    @Binding var isNewFolderAlertPresented: Bool
+    @Binding var newFolderName: String
+    let storagesViewModel: StoragesViewModel
+    let cloudTargetProvider: StorageProviderType
+
+    func body(content: Content) -> some View {
+        content
+            .fileImporter(
+                isPresented: $isFolderImporterPresented,
+                allowedContentTypes: [.folder],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    storagesViewModel.selectedProvider = cloudTargetProvider
+                    Task {
+                        await storagesViewModel.uploadFolder(fileURL: url)
+                    }
+                case .failure(let error):
+                    storagesViewModel.selectedProvider = cloudTargetProvider
+                    storagesViewModel.reportFilePickerError(error)
+                }
+            }
+            .alert("Новая папка", isPresented: $isNewFolderAlertPresented) {
+                TextField("Название папки", text: $newFolderName)
+
+                Button("Создать") {
+                    let name = newFolderName
+                    newFolderName = ""
+                    storagesViewModel.selectedProvider = cloudTargetProvider
+                    Task {
+                        await storagesViewModel.createFolder(
+                            named: name,
+                            in: cloudTargetProvider
+                        )
+                    }
+                }
+
+                Button("Отмена", role: .cancel) {
+                    newFolderName = ""
+                }
+            } message: {
+                Text("Папка будет создана в текущей папке облака.")
+            }
+    }
+}
+
 // MARK: - Preview
 private struct PreviewCloudStorageRepository: CloudStorageRepository {
     func getStorageUsage() async throws -> CloudStorageUsage {
@@ -632,7 +1024,7 @@ private struct PreviewCloudStorageRepository: CloudStorageRepository {
     let mockStorageRepository = PreviewCloudStorageRepository()
     let fileAccess = LocalFileAccess()
     let hasher = SHA256FileHasher()
-    let uploadRepository = UploadSessionRepositoryImpl(modelContext: container.mainContext)
+    let uploadRepository = UploadSessionRepositoryImpl(modelContainer: container)
 
     BackupListView(
         fetchBackupRecords: FetchBackupRecordsUseCase(repository: repository),

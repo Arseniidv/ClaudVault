@@ -15,6 +15,7 @@ struct CreateBackupView: View {
         fileAccessRepository: FileAccessRepository,
         fileHasher: FileHashing,
         createBackupWithUpload: CreateBackupWithUploadUseCase,
+        availableProviders: [StorageProviderType] = [.googleDrive],
         initialFileURL: URL? = nil,
         autoOpenImporter: Bool = false,
         onCreated: @escaping () -> Void
@@ -23,7 +24,8 @@ struct CreateBackupView: View {
             initialValue: CreateBackupViewModel(
                 fileAccessRepository: fileAccessRepository,
                 fileHasher: fileHasher,
-                createBackupWithUpload: createBackupWithUpload
+                createBackupWithUpload: createBackupWithUpload,
+                availableProviders: availableProviders
             )
         )
 
@@ -37,6 +39,7 @@ struct CreateBackupView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     headerSection
+                    providerSection
                     fileSelectionSection
                     if let fileName = viewModel.selectedFileName {
                         selectedFileSection(fileName: fileName)
@@ -55,7 +58,7 @@ struct CreateBackupView: View {
                 }
                 .padding(24)
             }
-            .background(Color(red: 0.035, green: 0.045, blue: 0.075))
+            .background(AppColors.background)
             .navigationTitle("Новая резервная копия")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -89,7 +92,6 @@ struct CreateBackupView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .task {
             // Файл, выбранный заранее (например, PDF из сканера документов).
             if let initialFileURL {
@@ -105,18 +107,78 @@ struct CreateBackupView: View {
         Button("Закрыть") {
             dismiss()
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(AppColors.textPrimary)
     }
 
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Создание резервной копии")
                 .font(.system(size: 23, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             Text("Файл будет загружен в подключённое облачное хранилище.")
                 .font(.system(size: 14))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(.primary.opacity(0.55))
+        }
+    }
+
+    /// Выбор облака-приёмника: файл загружается в выбранное
+    /// подключённое хранилище (Google Drive, Dropbox, OneDrive).
+    private var providerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Облачное хранилище")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(AppColors.textPrimary)
+
+            if viewModel.availableProviders.count > 1 {
+                HStack(spacing: 10) {
+                    ForEach(viewModel.availableProviders) { provider in
+                        let isSelected = viewModel.selectedProvider == provider
+                        Button {
+                            viewModel.selectedProvider = provider
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: provider.icon)
+                                Text(provider.name)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                            }
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(isSelected ? .white : .primary.opacity(0.65))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(
+                                isSelected
+                                    ? Color.blue.opacity(0.85)
+                                    : Color.primary.opacity(0.05)
+                            )
+                            .clipShape(Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(
+                                        isSelected
+                                            ? Color.blue
+                                            : Color.primary.opacity(0.12),
+                                        lineWidth: 1
+                                    )
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.isProgressing)
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: viewModel.selectedProvider.icon)
+                    Text(viewModel.selectedProvider.name)
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary.opacity(0.7))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Color.primary.opacity(0.05))
+                .clipShape(Capsule())
+            }
         }
     }
 
@@ -128,7 +190,7 @@ struct CreateBackupView: View {
                 Image(systemName: "doc.badge.plus")
                     .font(.system(size: 34))
                     .foregroundStyle(
-                        Color(red: 0.48, green: 0.65, blue: 1)
+                        AppColors.accent
                     )
                 Text(
                     viewModel.selectedFileName == nil
@@ -136,20 +198,20 @@ struct CreateBackupView: View {
                     : "Выбрать другой файл"
                 )
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
                 Text("Откроется системное приложение «Файлы»")
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.primary.opacity(0.5))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 32)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 18))
             .overlay {
                 RoundedRectangle(cornerRadius: 18)
                     .stroke(
-                        Color.white.opacity(0.09),
+                        Color.primary.opacity(0.09),
                         style: StrokeStyle(lineWidth: 1, dash: [6])
                     )
             }
@@ -163,7 +225,7 @@ struct CreateBackupView: View {
 
             Text("Выбранный файл")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
 
             HStack(spacing: 12) {
                 Image(systemName: "doc.fill")
@@ -173,16 +235,13 @@ struct CreateBackupView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(fileName)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
                         .lineLimit(2)
 
                     if let fileSize = viewModel.fileSize {
-                        Text(ByteCountFormatter.string(
-                            fromByteCount: fileSize,
-                            countStyle: .file
-                        ))
+                        Text(ByteFormatting.string(fromByteCount: fileSize))
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.primary.opacity(0.5))
                     }
                 }
 
@@ -192,18 +251,32 @@ struct CreateBackupView: View {
                     .foregroundStyle(.green)
             }
             .padding(16)
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Имя файла")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.primary.opacity(0.6))
+
+                TextField("Имя файла", text: $viewModel.editableFileName)
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppColors.textPrimary)
+                    .padding(12)
+                    .background(Color.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .disabled(viewModel.isProgressing)
+            }
 
             if let checksum = viewModel.checksum {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("SHA-256")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.primary.opacity(0.6))
 
                     Text(checksum)
                         .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(.primary.opacity(0.45))
                         .textSelection(.enabled)
                 }
             }
@@ -215,7 +288,7 @@ struct CreateBackupView: View {
             HStack {
                 Text("Загрузка в облако")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(.primary.opacity(0.8))
 
                 Spacer()
 
@@ -227,7 +300,7 @@ struct CreateBackupView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule()
-                        .fill(Color.white.opacity(0.08))
+                        .fill(Color.primary.opacity(0.08))
 
                     Capsule()
                         .fill(Color.blue)
@@ -240,7 +313,7 @@ struct CreateBackupView: View {
             .frame(height: 6)
         }
         .padding(14)
-        .background(Color.white.opacity(0.045))
+        .background(Color.primary.opacity(0.045))
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -251,7 +324,7 @@ struct CreateBackupView: View {
 
             Text(message)
                 .font(.system(size: 13))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -266,7 +339,7 @@ struct CreateBackupView: View {
 
             Text("Резервная копия успешно создана")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppColors.textPrimary)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -288,7 +361,7 @@ struct CreateBackupView: View {
             HStack(spacing: 10) {
                 if viewModel.isProgressing {
                     ProgressView()
-                        .tint(.white)
+                        .tint(AppColors.textPrimary)
                 } else {
                     Image(systemName: "plus.circle.fill")
                 }
@@ -300,7 +373,7 @@ struct CreateBackupView: View {
                 )
                 .font(.system(size: 15, weight: .semibold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(AppColors.textPrimary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 17)
             .background(

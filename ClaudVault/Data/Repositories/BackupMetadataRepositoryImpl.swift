@@ -8,17 +8,28 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
+
+    /// Владелец данных; nil — сеанса нет, репозиторий пуст.
+    private var ownerID: String? {
+        CurrentUserContext.shared.ownerID
+    }
     func fetchRecord(bySource sourceIdentifier: String) throws -> BackupRecord? {
+        guard let ownerID else { return nil }
         let descriptor = FetchDescriptor<BackupRecordModel>(
-            predicate: #Predicate { $0.sourceIdentifier == sourceIdentifier }
+            predicate: #Predicate {
+                $0.sourceIdentifier == sourceIdentifier && $0.ownerID == ownerID
+            }
         )
         guard let model = try modelContext.fetch(descriptor).first else { return nil }
         return BackupModelMapper.toDomain(model)
     }
     
     func saveVersion(_ version: BackupVersion, for recordID: UUID) throws {
+        guard let ownerID else { return }
         let descriptor = FetchDescriptor<BackupRecordModel>(
-            predicate: #Predicate { $0.id == recordID }
+            predicate: #Predicate {
+                $0.id == recordID && $0.ownerID == ownerID
+            }
         )
         guard let recordModel = try modelContext.fetch(descriptor).first else {
             throw BackupMetadataRepositoryError.recordNotFound
@@ -28,13 +39,34 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
             from: version,
             backupRecord: recordModel
         )
+        versionModel.ownerID = ownerID
         modelContext.insert(versionModel)
         try modelContext.save()
     }
     
-    func deleteVersion(id: UUID) throws {
+    func updateVersion(_ version: BackupVersion) throws {
+        guard let ownerID else { return }
         let descriptor = FetchDescriptor<BackupVersionModel>(
-            predicate: #Predicate { $0.id == id }
+            predicate: #Predicate {
+                $0.id == version.id && $0.ownerID == ownerID
+            }
+        )
+        guard let model = try modelContext.fetch(descriptor).first else {
+            return
+        }
+        model.fileSize = version.fileSize
+        model.checksum = version.checksum
+        model.cloudObjectID = version.cloudObjectID
+        model.uploadedAt = version.uploadedAt
+        try modelContext.save()
+    }
+
+    func deleteVersion(id: UUID) throws {
+        guard let ownerID else { return }
+        let descriptor = FetchDescriptor<BackupVersionModel>(
+            predicate: #Predicate {
+                $0.id == id && $0.ownerID == ownerID
+            }
         )
         guard let model = try modelContext.fetch(descriptor).first else { return }
         modelContext.delete(model)
@@ -50,7 +82,9 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
     }
  
     func fetchRecords() throws -> [BackupRecord] {
+        guard let ownerID else { return [] }
         let descriptor = FetchDescriptor<BackupRecordModel>(
+            predicate: #Predicate { $0.ownerID == ownerID },
             sortBy: [
                 SortDescriptor(\.updatedAt, order: .reverse)
             ]
@@ -60,7 +94,10 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
     }
     
     func calculateUsedStorage() throws -> Int64 {
-        let descriptor = FetchDescriptor<BackupVersionModel>()
+        guard let ownerID else { return 0 }
+        let descriptor = FetchDescriptor<BackupVersionModel>(
+            predicate: #Predicate { $0.ownerID == ownerID }
+        )
         let versions = try modelContext.fetch(descriptor)
 
         return versions.reduce(Int64.zero) { total, version in
@@ -69,8 +106,11 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
     }
 
     func fetchRecord(id: UUID) throws -> BackupRecord? {
+        guard let ownerID else { return nil }
         let descriptor = FetchDescriptor<BackupRecordModel>(
-            predicate: #Predicate { $0.id == id }
+            predicate: #Predicate {
+                $0.id == id && $0.ownerID == ownerID
+            }
         )
         guard let model = try modelContext.fetch(descriptor).first else { return nil }
         return BackupModelMapper.toDomain(model)
@@ -78,22 +118,29 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
     
 
     func saveRecord(_ record: BackupRecord) throws {
+        guard let ownerID else { return }
         let recordID = record.id
         let descriptor = FetchDescriptor<BackupRecordModel>(
-            predicate: #Predicate { $0.id == recordID }
+            predicate: #Predicate {
+                $0.id == recordID && $0.ownerID == ownerID
+            }
         )
         if let existingModel = try modelContext.fetch(descriptor).first {
             BackupModelMapper.update(existingModel, from: record)
         } else {
             let newModel = BackupModelMapper.makeModel(from: record)
+            newModel.ownerID = ownerID
             modelContext.insert(newModel)
         }
         try modelContext.save()
     }
 
     func deleteRecord(id: UUID) throws {
+        guard let ownerID else { return }
         let descriptor = FetchDescriptor<BackupRecordModel>(
-            predicate: #Predicate { $0.id == id }
+            predicate: #Predicate {
+                $0.id == id && $0.ownerID == ownerID
+            }
         )
         guard let model = try modelContext.fetch(descriptor).first else { return }
         modelContext.delete(model)
@@ -102,14 +149,12 @@ final class BackupMetadataRepositoryImpl: BackupMetadataRepository {
     
     // MARK: - Backup Versions
     
-    func saveVersion(_ version: BackupVersion) throws {
-        // Перенаправляем логику в новый протокольный метод, чтобы не дублировать код
-        try saveVersion(version, for: version.backupRecordID)
-    }
-    
     func fetchVersions(for recordID: UUID) throws -> [BackupVersion] {
+        guard let ownerID else { return [] }
         let descriptor = FetchDescriptor<BackupRecordModel>(
-            predicate: #Predicate { $0.id == recordID }
+            predicate: #Predicate {
+                $0.id == recordID && $0.ownerID == ownerID
+            }
         )
         
         guard let recordModel = try modelContext.fetch(descriptor).first else {

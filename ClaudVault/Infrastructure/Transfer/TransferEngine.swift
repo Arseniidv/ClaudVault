@@ -1,0 +1,475 @@
+import Foundation
+
+/// Движок chunked-передач: источник чанков → сессия приёмника →
+/// журнал → верификация. Используется для загрузки локальных
+/// файлов и cloud-to-cloud переноса.
+@MainActor
+public final class TransferEngine: BackupTransferEngine {
+
+    private let journal: TransferJournal
+    private let chunkSize: Int64
+
+    /// Активная запись журнала текущей передачи (для отмены).
+    private(set) var activeRecordID: UUID?
+    /// Вызывается при изменении прогресса активной передачи (0...1).
+    public var onProgress: (@Sendable (Double) -> Void)?
+
+    /// Флаг отмены, выставляемый `cancelActive()`.
+    ///
+    /// `Task.checkCancellation` в цикле движка ловит только отмену
+    /// внешней задачи — у вызовов из UseCase'ов (создание бэкапа,
+    /// перенос бэкапа между облаками) такой задачи нет, поэтому
+    /// движок проверяет этот флаг на каждой итерации.
+    private var cancelRequested = false
+
+    public init(journal: TransferJournal, chunkSize: Int64 = 8 * 1024 * 1024) {
+        self.journal = journal
+        self.chunkSize = chunkSize
+    }
+
+    // MARK: - Upload (device → cloud)
+
+    /// Загружает локальный файл в облако чанками с журналированием.
+    /// При `nil` от `makeUploadSession` бросает `.notImplemented` —
+    /// вызывающий код откатывается на `repository.uploadFile`.
+    public func uploadFile(
+        fileURL: URL,
+        name: String,
+        mimeType: String,
+        targetProvider: String,
+        target: any CloudStorageRepository,
+        parentFolderID: String?
+    ) async throws -> CloudFile {
+        guard let attributes = try? FileManager.default.attributesOfItem(
+            atPath: fileURL.path
+        ),
+              let size = (attributes[.size] as? NSNumber)?.int64Value else {
+            throw CloudStorageError.operationFailed("Файл недоступен для чтения.")
+        }
+
+        let record = TransferRecord(
+            kind: .upload,
+            sourceFilePath: fileURL.path,
+            targetProvider: targetProvider,
+            targetParentID: parentFolderID ?? "",
+            name: name,
+            mimeType: mimeType,
+            sizeBytes: size
+        )
+        try await journal.begin(record)
+        activeRecordID = record.id
+        defer { activeRecordID = nil }
+
+        do {
+            let file = try await runUpload(
+                record: record,
+                source: FileChunkSource(fileURL: fileURL, totalSize: size),
+                target: target,
+                parentFolderID: parentFolderID
+            )
+            try await journal.delete(id: record.id)
+            return file
+        } catch {
+            try? await journal.setState(
+                id: record.id,
+                state: Self.isCancellation(error) ? .cancelled : .failed,
+                error: error.localizedDescription
+            )
+            throw error
+        }
+    }
+
+    // MARK: - Cloud-to-cloud transfer
+
+    /// Переносит файл из одного облака в другое чанками «на лету».
+    /// При `move == true` источник удаляется только после
+    /// верификации размера у приёмника.
+    /// Бросает `.notImplemented`, если провайдеры не поддерживают
+    /// chunked-передачу — вызывающий код использует fallback.
+    public func transferFile(
+        _ file: CloudFile,
+        from sourceProvider: String,
+        source: any CloudStorageRepository,
+        to targetProvider: String,
+        target: any CloudStorageRepository,
+        targetParentID: String?,
+        move: Bool
+    ) async throws -> CloudFile {
+        guard let sizeBytes = file.sizeBytes, sizeBytes >= 0 else {
+            throw CloudStorageError.operationFailed(
+                "Размер файла неизвестен — передача невозможна."
+            )
+        }
+
+        guard let chunkSource = try await source.makeChunkSource(for: file) else {
+            throw CloudStorageError.notImplemented
+        }
+
+        let record = TransferRecord(
+            kind: .cloudTransfer,
+            sourceProvider: sourceProvider,
+            sourceFileID: file.id,
+            targetProvider: targetProvider,
+            targetParentID: targetParentID ?? "",
+            name: file.name,
+            mimeType: file.mimeType,
+            sizeBytes: sizeBytes,
+            moveSource: move
+        )
+        try await journal.begin(record)
+        activeRecordID = record.id
+        defer { activeRecordID = nil }
+
+        do {
+            let uploaded = try await runUpload(
+                record: record,
+                source: chunkSource,
+                target: target,
+                parentFolderID: targetParentID
+            )
+
+            if move {
+                try await source.deleteFile(id: file.id)
+            }
+
+            try await journal.delete(id: record.id)
+            return uploaded
+        } catch {
+            try? await journal.setState(
+                id: record.id,
+                state: Self.isCancellation(error) ? .cancelled : .failed,
+                error: error.localizedDescription
+            )
+            throw error
+        }
+    }
+
+    // MARK: - Resume
+
+    /// Подхватывает незавершённые записи журнала после перезапуска.
+    /// `repoFor` возвращает репозиторий по `StorageProviderType.rawValue`.
+    /// Записи, которые невозможно продолжить (протухшая сессия,
+    /// удалённый локальный файл), помечаются `.failed`.
+    public func resumePending(
+        repoFor: (String) -> (any CloudStorageRepository)?
+    ) async {
+        guard let records = try? await journal.pendingRecords() else { return }
+
+        for record in records {
+            do {
+                switch record.kind {
+                case .upload:
+                    try await resumeUpload(record: record, repoFor: repoFor)
+                case .cloudTransfer:
+                    try await resumeTransfer(record: record, repoFor: repoFor)
+                }
+            } catch {
+                try? await journal.setState(
+                    id: record.id,
+                    state: .failed,
+                    error: "Не удалось возобновить: \(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
+    private func resumeUpload(
+        record: TransferRecord,
+        repoFor: (String) -> (any CloudStorageRepository)?
+    ) async throws {
+        guard let target = repoFor(record.targetProvider) else {
+            throw CloudStorageError.notConnected
+        }
+        let fileURL = URL(fileURLWithPath: record.sourceFilePath)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw CloudStorageError.operationFailed("Исходный файл недоступен.")
+        }
+
+        let session = try await makeSession(
+            record: record,
+            target: target,
+            parentFolderID: record.targetParentID.isEmpty
+                ? nil : record.targetParentID
+        )
+        let source = FileChunkSource(
+            fileURL: fileURL,
+            totalSize: record.sizeBytes
+        )
+
+        _ = try await runUpload(
+            record: record,
+            source: source,
+            target: target,
+            parentFolderID: record.targetParentID.isEmpty
+                ? nil : record.targetParentID,
+            existingSession: session
+        )
+        try await journal.delete(id: record.id)
+    }
+
+    private func resumeTransfer(
+        record: TransferRecord,
+        repoFor: (String) -> (any CloudStorageRepository)?
+    ) async throws {
+        guard let source = repoFor(record.sourceProvider),
+              let target = repoFor(record.targetProvider) else {
+            throw CloudStorageError.notConnected
+        }
+
+        // Восстанавливаем CloudFile-источник по id.
+        let file = try await source.fileMetadata(id: record.sourceFileID)
+        guard let chunkSource = try await source.makeChunkSource(for: file) else {
+            throw CloudStorageError.notImplemented
+        }
+
+        let session = try await makeSession(
+            record: record,
+            target: target,
+            parentFolderID: record.targetParentID.isEmpty
+                ? nil : record.targetParentID
+        )
+
+        _ = try await runUpload(
+            record: record,
+            source: chunkSource,
+            target: target,
+            parentFolderID: record.targetParentID.isEmpty
+                ? nil : record.targetParentID,
+            existingSession: session
+        )
+        if record.moveSource {
+            try await source.deleteFile(id: record.sourceFileID)
+        }
+        try await journal.delete(id: record.id)
+    }
+
+    /// Отмена текущей передачи: выставляет флаг, который цикл
+    /// движка проверяет на каждой итерации, и помечает запись
+    /// отменённой. Остановка происходит на ближайшей границе
+    /// чанка — уже отправленный провайдеру фрагмент не прерываем.
+    public func cancelActive() async {
+        guard let id = activeRecordID else { return }
+        cancelRequested = true
+        try? await journal.setState(id: id, state: .cancelled)
+    }
+
+    // MARK: - Private
+
+    /// Создаёт или восстанавливает сессию приёмника.
+    /// При протухшем `sessionState` провайдер возвращает nil —
+    /// тогда начинаем сессию заново (offset=0, перезапись файла
+    /// идемпотентна благодаря conflictBehavior провайдеров).
+    private func makeSession(
+        record: TransferRecord,
+        target: any CloudStorageRepository,
+        parentFolderID: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        if !record.sessionState.isEmpty {
+            if let restored = try await target.makeUploadSession(
+                name: record.name,
+                mimeType: record.mimeType,
+                parentFolderID: parentFolderID,
+                sizeBytes: record.sizeBytes,
+                resumeState: record.sessionState
+            ) {
+                return restored
+            }
+            // Сессия протухла — честный рестарт с offset=0.
+        }
+        return try await target.makeUploadSession(
+            name: record.name,
+            mimeType: record.mimeType,
+            parentFolderID: parentFolderID,
+            sizeBytes: record.sizeBytes,
+            resumeState: nil
+        )
+    }
+
+    private func runUpload(
+        record: TransferRecord,
+        source: any ChunkSource,
+        target: any CloudStorageRepository,
+        parentFolderID: String?,
+        existingSession: (session: any TransferSession, state: String)? = nil
+    ) async throws -> CloudFile {
+        // Сбрасываем флаг отмены в начале каждой передачи:
+        // предыдущая отмена не должна убивать следующую загрузку.
+        cancelRequested = false
+
+        let made: (session: any TransferSession, state: String)?
+        if let existingSession {
+            made = existingSession
+        } else {
+            made = try await makeSession(
+                record: record,
+                target: target,
+                parentFolderID: parentFolderID
+            )
+        }
+        guard let (session, state) = made else {
+            throw CloudStorageError.notImplemented
+        }
+
+        try await journal.updateSessionState(id: record.id, state: state)
+        try await journal.updateOffset(id: record.id, offset: session.confirmedOffset)
+        try await journal.setState(id: record.id, state: .uploading)
+
+        // Обёртка считает контрольные суммы передаваемых байт —
+        // после завершения сравним их с чексуммами приёмника.
+        let hashingSource = HashingChunkSource(base: source)
+
+        let recordID = record.id
+        let journal = self.journal
+        let chunkSize = self.chunkSize
+        let onProgress = self.onProgress
+
+        let uploaded = try await ChunkedUploadRunner.run(
+            source: hashingSource,
+            session: session,
+            chunkSize: chunkSize,
+            shouldCancel: { [weak self] in
+                self?.cancelRequested ?? false
+            },
+            onConfirmedOffset: { offset in
+                try await journal.updateProgress(
+                    id: recordID,
+                    offset: offset,
+                    sessionState: session.stateValue,
+                    hashAlgorithm: nil,
+                    hashValue: nil,
+                    streamSHA256: nil
+                )
+                onProgress?(Self.progress(uploaded: offset, total: record.sizeBytes))
+            }
+        )
+
+        // Верификация обязательна до удаления записи журнала
+        // и (для move) источника: размер + контрольная сумма,
+        // если провайдер её отдаёт и мы смогли посчитать.
+        try await journal.setState(id: record.id, state: .verifying)
+        let meta = try await target.fileMetadata(id: uploaded.id)
+        guard meta.sizeBytes == record.sizeBytes else {
+            throw CloudStorageError.operationFailed(
+                "Размер загруженного файла не совпадает с источником."
+            )
+        }
+        if let computed = hashingSource.finalizeHashes() {
+            try Self.verifyHashes(
+                computed: computed,
+                provider: meta.contentHashes
+            )
+        }
+        return uploaded
+    }
+
+    /// Сравнивает вычисленные хеши с чексуммами провайдера.
+    /// Проверяются только алгоритмы, которые есть с обеих сторон;
+    /// несовпадение любого общего алгоритма — ошибка передачи.
+    private static func verifyHashes(
+        computed: [ContentHash],
+        provider: [ContentHash]
+    ) throws {
+        for expected in provider {
+            guard let actual = computed.first(where: {
+                $0.algorithm == expected.algorithm
+            }) else { continue }
+            if actual.value.caseInsensitiveCompare(expected.value)
+                != .orderedSame {
+                throw CloudStorageError.operationFailed(
+                    "Контрольная сумма файла не совпадает — передача повреждена."
+                )
+            }
+        }
+    }
+
+    private static func progress(uploaded: Int64, total: Int64) -> Double {
+        guard total > 0 else { return uploaded > 0 ? 1 : 0 }
+        return min(max(Double(uploaded) / Double(total), 0), 1)
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        if case .cancelled = error as? CloudStorageError { return true }
+        return false
+    }
+}
+
+/// Общий цикл chunked-загрузки: источник → сессия → подтверждённое
+/// смещение → журнал. Не зависит от провайдера.
+public enum ChunkedUploadRunner {
+
+    /// Запускает передачу до `source.totalSize`. `onConfirmedOffset`
+    /// вызывается после каждого принятого провайдером фрагмента.
+    /// `shouldCancel` — дополнительная проверка отмены (например,
+    /// флаг `TransferEngine.cancelActive`), срабатывает на границе
+    /// каждого чанка и перед `finish()`.
+    public static func run(
+        source: any ChunkSource,
+        session: any TransferSession,
+        chunkSize: Int64,
+        shouldCancel: (() async -> Bool)? = nil,
+        onConfirmedOffset: (Int64) async throws -> Void = { _ in }
+    ) async throws -> CloudFile {
+        let total = source.totalSize
+        var offset = session.confirmedOffset
+        var stalledAttempts = 0
+
+        while offset < total {
+            try Task.checkCancellation()
+            if await shouldCancel?() == true {
+                throw CancellationError()
+            }
+
+            guard let payload = try await source.chunk(
+                at: offset,
+                maxLength: chunkSize
+            ) else {
+                throw CloudStorageError.operationFailed(
+                    "Источник оборвал передачу данных."
+                )
+            }
+            guard payload.length > 0 else {
+                await source.discard(payload)
+                throw CloudStorageError.operationFailed(
+                    "Источник вернул пустой чанк."
+                )
+            }
+
+            do {
+                try await session.send(payload)
+            } catch {
+                await source.discard(payload)
+                throw error
+            }
+            await source.discard(payload)
+
+            let next = session.confirmedOffset
+            if next <= offset {
+                // Провайдер не продвинул смещение — защищаемся
+                // от бесконечного цикла.
+                stalledAttempts += 1
+                guard stalledAttempts <= 5 else {
+                    throw CloudStorageError.operationFailed(
+                        "Приёмник не продвигает загрузку."
+                    )
+                }
+            } else {
+                stalledAttempts = 0
+                offset = next
+                try await onConfirmedOffset(offset)
+            }
+        }
+
+        // Финальная проверка: отмена, пришедшая на последнем чанке,
+        // не должна завершать передачу «успешно».
+        try Task.checkCancellation()
+        if await shouldCancel?() == true {
+            throw CancellationError()
+        }
+
+        return try await session.finish()
+    }
+}

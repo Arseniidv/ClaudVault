@@ -18,6 +18,9 @@ final class UploadSessionModel {
     var backupRecordID: UUID?
     var errorMessage: String?
 
+    /// Владелец сессии — пользователь CloudVault.
+    var ownerID: String
+
     init(
         id: UUID = UUID(),
         fileName: String,
@@ -29,7 +32,8 @@ final class UploadSessionModel {
         createdAt: Date = .now,
         updatedAt: Date = .now,
         backupRecordID: UUID? = nil,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        ownerID: String = ""
     ) {
         self.id = id
         self.fileName = fileName
@@ -42,5 +46,6 @@ final class UploadSessionModel {
         self.updatedAt = updatedAt
         self.backupRecordID = backupRecordID
         self.errorMessage = errorMessage
+        self.ownerID = ownerID
     }
 }

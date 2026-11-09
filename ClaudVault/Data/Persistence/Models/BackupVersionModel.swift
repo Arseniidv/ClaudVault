@@ -12,6 +12,9 @@ final class BackupVersionModel {
     var cloudObjectID: String
     var uploadedAt: Date
 
+    /// Владелец записи — пользователь CloudVault.
+    var ownerID: String
+
     var backupRecord: BackupRecordModel?
 
     init(
@@ -20,7 +23,8 @@ final class BackupVersionModel {
         checksum: String,
         cloudObjectID: String,
         uploadedAt: Date = .now,
-        backupRecord: BackupRecordModel? = nil
+        backupRecord: BackupRecordModel? = nil,
+        ownerID: String = ""
     ) {
         self.id = id
         self.fileSize = fileSize
@@ -28,5 +32,6 @@ final class BackupVersionModel {
         self.cloudObjectID = cloudObjectID
         self.uploadedAt = uploadedAt
         self.backupRecord = backupRecord
+        self.ownerID = ownerID
     }
 }

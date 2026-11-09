@@ -17,6 +17,10 @@ final class BackupRecordModel {
     var localFilePath: String?
     var localFileBookmark: String?
 
+    /// Владелец записи — пользователь CloudVault.
+    /// Пустая строка — записи до введения изоляции аккаунтов.
+    var ownerID: String
+
     @Relationship(
         deleteRule: .cascade,
         inverse: \BackupVersionModel.backupRecord
@@ -31,7 +35,8 @@ final class BackupRecordModel {
         updatedAt: Date = .now,
         storageProviderRaw: String? = nil,
         localFilePath: String? = nil,
-        localFileBookmark: String? = nil
+        localFileBookmark: String? = nil,
+        ownerID: String = ""
     ) {
         self.id = id
         self.fileName = fileName
@@ -41,5 +46,6 @@ final class BackupRecordModel {
         self.storageProviderRaw = storageProviderRaw
         self.localFilePath = localFilePath
         self.localFileBookmark = localFileBookmark
+        self.ownerID = ownerID
     }
 }

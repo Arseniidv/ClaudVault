@@ -73,7 +73,8 @@ enum BackupModelMapper {
             checksum: entity.checksum,
             cloudObjectID: entity.cloudObjectID,
             uploadedAt: entity.uploadedAt,
-            backupRecord: backupRecord
+            backupRecord: backupRecord,
+            ownerID: backupRecord.ownerID
         )
     }
 }
