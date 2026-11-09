@@ -1,15 +1,17 @@
 import Foundation
 
-struct BackupVersion: Identifiable, Equatable, Codable {
-    let id: UUID
-    let backupRecordID: UUID
+public struct BackupVersion: Identifiable, Equatable, Codable {
+    public let id: UUID
+    public let backupRecordID: UUID
 
-    let fileSize: Int64
-    let checksum: String
-    let cloudObjectID: String
-    let uploadedAt: Date
+    public let fileSize: Int64
+    public let checksum: String
+    /// `var`: у Dropbox id — это путь файла, после переименования
+    /// (`renameFile`) он меняется и сохраняется обратно в метаданные.
+    public var cloudObjectID: String
+    public let uploadedAt: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         backupRecordID: UUID,
         fileSize: Int64,
