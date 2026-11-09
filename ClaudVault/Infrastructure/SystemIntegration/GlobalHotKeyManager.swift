@@ -4,14 +4,34 @@ import Carbon.HIToolbox
 
 
 enum RadialHotKeyPreset: String, CaseIterable, Identifiable, Sendable {
+    // Безопасные пресеты — первыми в списке.
     case optionSpace
-    case controlSpace
     case optionShiftSpace
+    case controlCommandSpace
+    // Пресеты, конфликтующие с системными сочетаниями macOS —
+    // в конце списка и с предупреждением в UI.
+    case controlSpace
     case controlOptionSpace
     case commandOptionSpace
-    case controlCommandSpace
 
     var id: String { rawValue }
+
+    /// Системное сочетание macOS, с которым пресет может
+    /// конфликтовать: Carbon-регистрация hotkey пройдёт,
+    /// но система способна перехватить клавишу раньше.
+    /// nil — известных конфликтов нет.
+    var systemConflict: String? {
+        switch self {
+        case .controlSpace:
+            return "⌃Space — системное переключение источника ввода"
+        case .controlOptionSpace:
+            return "⌃⌥Space — системное переключение источника ввода"
+        case .commandOptionSpace:
+            return "⌘⌥Space — системный поиск Finder"
+        case .optionSpace, .optionShiftSpace, .controlCommandSpace:
+            return nil
+        }
+    }
 
     var title: String {
         switch self {

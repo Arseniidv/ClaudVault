@@ -31,7 +31,6 @@ struct MenuBarView: View {
         .padding(12)
         .frame(width: 320)
         .background(AppColors.background)
-        .preferredColorScheme(.dark)
         .task {
             viewModel.startMonitoring()
             await viewModel.refresh()

@@ -317,19 +317,38 @@ final class RadialMenuCoordinator {
         statusMessage = nil
         defer { isWorking = false }
 
+        // Прогресс длительных операций показываем в центре
+        // панели — спиннер сам по себе не объясняет,
+        // идёт ли перенос и сколько уже сделано.
+        let progressLabel: String = switch kind {
+        case .upload: "Загрузка"
+        case .download: "Скачивание"
+        case .transfer: "Перенос"
+        case .share, .information: "Выполняется"
+        }
+        let progressHandler: (Double) -> Void = { [weak self] fraction in
+            let percent = Int(
+                (min(max(fraction, 0), 1) * 100).rounded()
+            )
+            Task { @MainActor [weak self] in
+                self?.statusMessage = "\(progressLabel)… \(percent)%"
+            }
+        }
+
         do {
             let outcome = try await registry.perform(
                 kind: kind,
                 selection: selection,
                 context: context,
-                provider: provider
+                provider: provider,
+                progressHandler: progressHandler
             )
             switch outcome {
             case .completed(let message):
                 statusMessage = message
                 // Короткая пауза, чтобы пользователь увидел результат,
                 // затем закрываем меню.
-                try? await Task.sleep(for: .milliseconds(1400))
+                try? await Task.sleep(for: .milliseconds(2200))
                 if isPresented { dismiss() }
             case .showInformation(let infos):
                 information = infos

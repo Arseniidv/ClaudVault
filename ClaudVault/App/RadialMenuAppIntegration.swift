@@ -42,7 +42,8 @@ enum RadialMenuAppIntegration {
             createBackupWithUpload: dependencies.createBackupWithUpload,
             transferBackupToProvider: dependencies.transferBackupToProvider,
             supportedProviders: StoragesViewModel.supportedProviders,
-            downloadsDirectory: downloadsDirectory
+            downloadsDirectory: downloadsDirectory,
+            storagesViewModel: dependencies.storagesViewModel
         )
 
         let defaults = UserDefaults.standard

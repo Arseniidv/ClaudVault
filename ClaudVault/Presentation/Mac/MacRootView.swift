@@ -30,7 +30,7 @@ struct MacRootView: View {
             detailView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    Color(red: 0.035, green: 0.047, blue: 0.075)
+                    AppColors.background
                         .ignoresSafeArea()
                 )
         }
@@ -80,11 +80,11 @@ struct MacRootView: View {
                             Image(systemName: "plus.circle")
                                 .font(.system(size: 15))
                                 .frame(width: 24)
-                                .foregroundStyle(.white.opacity(0.55))
+                                .foregroundStyle(.primary.opacity(0.55))
 
                             Text("Добавить облако…")
                                 .font(.system(size: 14))
-                                .foregroundStyle(.white.opacity(0.65))
+                                .foregroundStyle(.primary.opacity(0.65))
                                 .lineLimit(1)
 
                             Spacer()
@@ -104,11 +104,11 @@ struct MacRootView: View {
                             Image(systemName: AppTab.settings.icon)
                                 .font(.system(size: 15))
                                 .frame(width: 24)
-                                .foregroundStyle(.white.opacity(0.65))
+                                .foregroundStyle(.primary.opacity(0.65))
 
                             Text("Настройки")
                                 .font(.system(size: 14))
-                                .foregroundStyle(.white.opacity(0.65))
+                                .foregroundStyle(.primary.opacity(0.65))
                                 .lineLimit(1)
 
                             Spacer()
@@ -123,7 +123,7 @@ struct MacRootView: View {
             .padding(.horizontal, AppSpacing.sm)
             .padding(.vertical, AppSpacing.md)
         }
-        .background(Color(red: 0.05, green: 0.06, blue: 0.09))
+        .background(AppColors.background)
     }
 
     /// Строка подключённого облака: выбор переводит на «Файлы»
@@ -145,13 +145,13 @@ struct MacRootView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(provider.name)
                         .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? .white : .white.opacity(0.7))
+                        .foregroundStyle(isSelected ? .white : .primary.opacity(0.7))
                         .lineLimit(1)
 
                     if !provider.email.isEmpty {
                         Text(provider.email)
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(.primary.opacity(0.4))
                             .lineLimit(1)
                     }
                 }
@@ -187,7 +187,7 @@ struct MacRootView: View {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.8)
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(.primary.opacity(0.45))
                 .padding(.horizontal, AppSpacing.sm)
                 .padding(.top, AppSpacing.sm)
                 .padding(.bottom, 2)
@@ -207,11 +207,11 @@ struct MacRootView: View {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .medium))
                     .frame(width: 24)
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.65))
+                    .foregroundStyle(isSelected ? .white : .primary.opacity(0.65))
 
                 Text(title)
                     .font(.system(size: 14, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.65))
+                    .foregroundStyle(isSelected ? .white : .primary.opacity(0.65))
                     .lineLimit(1)
 
                 Spacer()
