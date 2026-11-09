@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Deep link из виджета хранилищ: `claudvault://storage/{provider}?email={email}`.
 ///

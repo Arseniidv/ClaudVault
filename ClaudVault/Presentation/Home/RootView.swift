@@ -1,6 +1,7 @@
 
 import SwiftUI
 import SwiftData
+import ClaudVaultDomain
 
 @MainActor
 struct RootView: View {

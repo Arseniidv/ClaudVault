@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Модель данных виджета хранилищ.
 ///

@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import ClaudVaultDomain
 
 /// Клиент Microsoft Graph API для OneDrive (`/me/drive`).
 ///

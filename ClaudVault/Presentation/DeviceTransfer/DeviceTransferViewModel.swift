@@ -1,6 +1,7 @@
 import Foundation
 import CoreImage.CIFilterBuiltins
 import CoreGraphics
+import ClaudVaultDomain
 
 /// ViewModel экрана переноса подключений (QR Guard).
 @MainActor

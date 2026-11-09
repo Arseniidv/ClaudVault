@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Держатель идентификатора текущего пользователя CloudVault.
 ///

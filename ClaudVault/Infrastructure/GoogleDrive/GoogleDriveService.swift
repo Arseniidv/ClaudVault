@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import ClaudVaultDomain
 
 final class GoogleDriveService {
     private static let logger = Logger(

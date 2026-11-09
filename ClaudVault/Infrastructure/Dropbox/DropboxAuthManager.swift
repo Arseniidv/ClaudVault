@@ -5,6 +5,7 @@ import SwiftyDropbox
 import UIKit
 #elseif os(macOS)
 import AppKit
+import ClaudVaultDomain
 #endif
 
 // MARK: - Dropbox Auth Manager

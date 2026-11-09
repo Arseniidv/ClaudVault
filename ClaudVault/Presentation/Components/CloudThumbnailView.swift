@@ -1,5 +1,6 @@
 import SwiftUI
 import Kingfisher
+import ClaudVaultDomain
 
 enum CloudThumbnailError: Error {
     case noPreview

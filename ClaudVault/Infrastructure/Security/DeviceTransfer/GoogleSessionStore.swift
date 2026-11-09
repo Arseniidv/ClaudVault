@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import ClaudVaultDomain
 
 /// Восстановленная Google-сессия (refresh token), полученная
 /// через QR-перенос с другого устройства.

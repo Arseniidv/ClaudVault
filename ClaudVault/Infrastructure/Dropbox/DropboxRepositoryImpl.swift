@@ -2,6 +2,7 @@ import Foundation
 import UniformTypeIdentifiers
 import SwiftyDropbox
 import OSLog
+import ClaudVaultDomain
 
 /// Реализация `CloudStorageRepository` поверх SwiftyDropbox.
 ///

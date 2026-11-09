@@ -1,6 +1,7 @@
 import Foundation
 import Security
 import SwiftyDropbox
+import ClaudVaultDomain
 
 /// Мост между синхронным протоколом `SecureStorageAccess` SwiftyDropbox
 /// и единым Keychain-хранилищем приложения (`com.claudvault.storage.auth`).

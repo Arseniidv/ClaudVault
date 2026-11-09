@@ -2,6 +2,7 @@ import Foundation
 
 #if os(iOS) && canImport(ActivityKit)
 import ActivityKit
+import ClaudVaultDomain
 
 /// Управляет Live Activities «синхронизация резервной копии»:
 /// одна `Activity<CloudSyncAttributes>` на каждую активную

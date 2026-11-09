@@ -1,5 +1,6 @@
 import SwiftUI
 import OSLog
+import ClaudVaultDomain
 
 /// Маршрут для push-навигации внутри стека «Файлы»:
 /// папка из облака, открытая из результатов поиска.

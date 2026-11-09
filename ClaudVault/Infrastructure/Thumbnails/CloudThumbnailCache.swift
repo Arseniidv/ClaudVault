@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Дисковый кэш миниатюр облачных файлов.
 ///

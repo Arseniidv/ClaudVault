@@ -9,6 +9,7 @@ import AppKit
 #endif
 import GoogleSignIn
 import FirebaseAuth
+import ClaudVaultDomain
 
 @MainActor
 final class AuthViewModel: ObservableObject {

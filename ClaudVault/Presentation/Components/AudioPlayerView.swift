@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import ClaudVaultDomain
 
 /// Плеер для потокового воспроизведения аудио из облака.
 /// Файл не скачивается — AVPlayer читает его по прямой ссылке

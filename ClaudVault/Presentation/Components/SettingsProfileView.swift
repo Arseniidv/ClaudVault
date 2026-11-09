@@ -1,5 +1,6 @@
 
 import SwiftUI
+import ClaudVaultDomain
 
 struct SettingsProfileView: View {
     var accountName: String? = nil

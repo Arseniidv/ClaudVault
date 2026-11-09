@@ -1,6 +1,7 @@
 import Foundation
 import FirebaseAuth
 import CryptoKit
+import ClaudVaultDomain
 
 final class FirebaseAuthRepository: AuthRepository, @unchecked Sendable {
     private let auth: Auth

@@ -1,6 +1,7 @@
 import Foundation
 import SwiftyDropbox
 import GoogleSignIn
+import ClaudVaultDomain
 
 /// Сбор и восстановление токенов облачных провайдеров
 /// для QR-переноса между устройствами.

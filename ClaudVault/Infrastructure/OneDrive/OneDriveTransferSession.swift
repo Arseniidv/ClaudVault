@@ -1,4 +1,5 @@
 import Foundation
+import ClaudVaultDomain
 
 /// Upload-сессия OneDrive (Microsoft Graph `createUploadSession`)
 /// как `TransferSession`.

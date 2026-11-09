@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import FirebaseCore
 import SwiftyDropbox
+import ClaudVaultDomain
 
 @main
 @MainActor

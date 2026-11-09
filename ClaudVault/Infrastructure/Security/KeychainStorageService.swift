@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import ClaudVaultDomain
 
 private nonisolated enum KeychainConstants {
     static let service = "com.claudvault.storage.auth"

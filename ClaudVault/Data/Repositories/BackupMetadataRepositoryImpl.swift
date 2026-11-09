@@ -1,6 +1,7 @@
 import Foundation
 import CryptoKit
 import SwiftData
+import ClaudVaultDomain
 
 @MainActor
 final class BackupMetadataRepositoryImpl: BackupMetadataRepository {

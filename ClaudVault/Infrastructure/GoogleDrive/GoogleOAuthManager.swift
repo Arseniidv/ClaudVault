@@ -5,6 +5,7 @@ import GoogleSignIn
 import UIKit
 #elseif os(macOS)
 import AppKit
+import ClaudVaultDomain
 #endif
 
 // MARK: - Google Account

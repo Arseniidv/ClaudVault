@@ -1,5 +1,6 @@
 import XCTest
 import SwiftData
+import ClaudVaultDomain
 @testable import ClaudVault
 
 

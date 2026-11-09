@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import ClaudVaultDomain
 
 @MainActor
 enum CloudVaultModelContainer {

@@ -1,5 +1,6 @@
 import Observation
 import Foundation
+import ClaudVaultDomain
 
 @MainActor
 @Observable

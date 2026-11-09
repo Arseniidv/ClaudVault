@@ -6,6 +6,7 @@ import Security
 import UIKit
 #elseif os(macOS)
 import AppKit
+import ClaudVaultDomain
 #endif
 
 /// Управляет OAuth-флоу OneDrive через Microsoft identity platform

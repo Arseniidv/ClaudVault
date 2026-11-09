@@ -1,5 +1,6 @@
 
 import SwiftUI
+import ClaudVaultDomain
 
 struct SettingsView: View {
     @ObservedObject var authViewModel: AuthViewModel

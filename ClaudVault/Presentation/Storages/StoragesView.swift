@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import ClaudVaultDomain
 
 struct StoragesView: View {
     let viewModel: StoragesViewModel
