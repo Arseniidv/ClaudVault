@@ -11,6 +11,11 @@ final class CreateBackupViewModel {
     private let fileHasher: FileHashing
     private let createBackupWithUpload: CreateBackupWithUploadUseCase
 
+    /// Подключённые облака, доступные для загрузки бэкапа.
+    let availableProviders: [StorageProviderType]
+    /// Облако-приёмник выбранного файла.
+    var selectedProvider: StorageProviderType
+
     // MARK: - State
 
     var errorMessage: String?
@@ -28,11 +33,16 @@ final class CreateBackupViewModel {
     init(
         fileAccessRepository: FileAccessRepository,
         fileHasher: FileHashing,
-        createBackupWithUpload: CreateBackupWithUploadUseCase
+        createBackupWithUpload: CreateBackupWithUploadUseCase,
+        availableProviders: [StorageProviderType] = [.googleDrive]
     ) {
         self.fileAccessRepository = fileAccessRepository
         self.fileHasher = fileHasher
         self.createBackupWithUpload = createBackupWithUpload
+        self.availableProviders = availableProviders.isEmpty
+            ? [.googleDrive]
+            : availableProviders
+        self.selectedProvider = self.availableProviders.first ?? .googleDrive
     }
 
     // MARK: - Select File
@@ -105,7 +115,8 @@ final class CreateBackupViewModel {
                 fileName: selectedFileName,
                 sourceIdentifier: sourceURL.path,
                 fileURL: sourceURL,
-                parentFolderID: nil
+                parentFolderID: nil,
+                storageProvider: selectedProvider
             ) { [weak self] fraction in
                 guard let self else { return }
                 Task { @MainActor in

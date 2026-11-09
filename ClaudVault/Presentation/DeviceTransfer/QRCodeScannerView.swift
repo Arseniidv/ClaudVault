@@ -1,15 +1,10 @@
 import SwiftUI
-
-/// Камера-сканер QR-кодов (iOS). На macOS камера не используется —
-/// там доступен только ручной ввод ссылки/ID сессии.
 #if os(iOS)
 import Vision
 import VisionKit
 
 struct QRCodeScannerView: UIViewControllerRepresentable {
-
     let onCodeScanned: (String) -> Void
-
     func makeUIViewController(context: Context) -> DataScannerViewController {
         let scanner = DataScannerViewController(
             recognizedDataTypes: [.barcode(symbologies: [.qr])],
@@ -22,16 +17,13 @@ struct QRCodeScannerView: UIViewControllerRepresentable {
         try? scanner.startScanning()
         return scanner
     }
-
     func updateUIViewController(
         _ uiViewController: DataScannerViewController,
         context: Context
     ) {}
-
     func makeCoordinator() -> Coordinator {
         Coordinator(onCodeScanned: onCodeScanned)
     }
-
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         private let onCodeScanned: (String) -> Void
         private var didScan = false
@@ -50,7 +42,7 @@ struct QRCodeScannerView: UIViewControllerRepresentable {
                 if case .barcode(let barcode) = item,
                    let payload = barcode.payloadStringValue {
                     didScan = true
-                    try? dataScanner.stopScanning()
+                    dataScanner.stopScanning()
                     onCodeScanned(payload)
                     return
                 }

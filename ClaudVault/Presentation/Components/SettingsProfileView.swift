@@ -2,16 +2,19 @@
 import SwiftUI
 
 struct SettingsProfileView: View {
-    var accountName: String? = nil
-    var accountEmail: String? = nil
+    @ObservedObject var authViewModel: AuthViewModel
+
+    private var user: AuthUser? {
+        authViewModel.currentUser
+    }
 
     private var isConnected: Bool {
-        accountEmail != nil
+        user != nil
     }
 
     var body: some View {
         NavigationLink {
-            ProfileView()
+            ProfileView(authViewModel: authViewModel)
         } label: {
             HStack(spacing: 14) {
 
@@ -36,13 +39,13 @@ struct SettingsProfileView: View {
 
                 // Информация о профиле
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(accountName ?? "Локальный профиль")
+                    Text(user?.resolvedDisplayName ?? "Локальный профиль")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppColors.textPrimary)
 
-                    Text(accountEmail ?? "Аккаунт не подключён")
+                    Text(user?.resolvedEmail ?? "Аккаунт не подключён")
                         .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.55))
+                        .foregroundStyle(.primary.opacity(0.55))
                 }
 
                 Spacer()
@@ -53,15 +56,15 @@ struct SettingsProfileView: View {
                     .font(.system(size: 20))
                     .foregroundStyle(isConnected
                                      ? .green.opacity(0.9)
-                                     : .white.opacity(0.5))
+                                     : .primary.opacity(0.5))
             }
             .padding(16)
             .contentShape(Rectangle())
-            .background(Color.white.opacity(0.045))
+            .background(Color.primary.opacity(0.045))
             .clipShape(RoundedRectangle(cornerRadius: 18))
             .overlay {
                 RoundedRectangle(cornerRadius: 18)
-                    .stroke(Color.white.opacity(0.07), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.07), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)

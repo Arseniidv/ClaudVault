@@ -20,6 +20,9 @@ final class AuthViewModel: ObservableObject {
     private let authRepository: AuthRepository
     private let otpService: OTPService
     private let passwordResetService: PasswordResetService
+    /// Координирует изоляцию данных при смене пользователя.
+    /// nil в тестах/превью — тогда контекст не переключается.
+    private let sessionCoordinator: UserSessionCoordinator?
 
     // MARK: - Published Properties
     @Published private(set) var currentUser: AuthUser?
@@ -41,7 +44,8 @@ final class AuthViewModel: ObservableObject {
         getCurrentUserUseCase: GetCurrentUserUseCase,
         authRepository: AuthRepository,
         otpService: OTPService,
-        passwordResetService: PasswordResetService
+        passwordResetService: PasswordResetService,
+        sessionCoordinator: UserSessionCoordinator? = nil
     ) {
         self.signInUseCase = signInUseCase
         self.signUpUseCase = signUpUseCase
@@ -51,12 +55,25 @@ final class AuthViewModel: ObservableObject {
         self.authRepository = authRepository
         self.otpService = otpService
         self.passwordResetService = passwordResetService
+        self.sessionCoordinator = sessionCoordinator
     }
     // MARK: - Observe Authentication
     func observeAuthState() {
         guard authStateTask == nil else { return }
+        // Последний обработанный владелец данных — для детекции
+        // реальной смены пользователя, а не каждого emission
+        // (обновления профиля приходят с тем же id).
+        var lastOwnerID: String? = nil
         authStateTask = Task {
             for await user in getCurrentUserUseCase.observeAuthState() {
+                let newOwnerID = user?.id.uuidString
+                if newOwnerID != lastOwnerID {
+                    await sessionCoordinator?.handleUserChange(
+                        from: lastOwnerID,
+                        to: newOwnerID
+                    )
+                    lastOwnerID = newOwnerID
+                }
                 self.currentUser = user
                 if user == nil {
                     // Сессия завершена — стираем снимок из App Group,
@@ -84,6 +101,10 @@ final class AuthViewModel: ObservableObject {
     }
     @MainActor
     func signInWithGoogle() async {
+        // Повторный вызов во время активного входа запрещён:
+        // параллельный GIDSignIn-флоу перезапишет continuation
+        // и «съест» результат, оставив вечный спиннер.
+        guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         successMessage = nil
@@ -114,7 +135,13 @@ final class AuthViewModel: ObservableObject {
                 withPresenting: presentingViewController
             )
             #elseif os(macOS)
-            guard let presentingWindow = NSApp.keyWindow ?? NSApp.windows.first else {
+            // presentingWindow — якорь ASWebAuthenticationSession.
+            // Предпочитаем видимое окно: `NSApp.windows.first`
+            // может вернуть скрытую панель, и тогда сессия
+            // не сможет корректно завершиться.
+            guard let presentingWindow = NSApp.keyWindow
+                ?? NSApp.windows.first(where: { $0.isVisible })
+                ?? NSApp.windows.first else {
                 throw NSError(
                     domain: "GoogleSignIn",
                     code: -1,
@@ -150,7 +177,39 @@ final class AuthViewModel: ObservableObject {
             )
             successMessage = "Вы успешно вошли через Google"
         } catch {
-            errorMessage = error.localizedDescription
+            // GIDSignIn-сессия — лишь источник credential'ов для
+            // Firebase. Если вход в Firebase не состоялся,
+            // оставлять «авторизованную» Google-сессию нельзя:
+            // она противоречила бы состоянию Firebase Auth
+            // (вход успешен в Google, но нет пользователя
+            // CloudVault). CloudVault-сессии Google Drive
+            // хранятся отдельно (GoogleSessionStore/Keychain)
+            // и от этого не страдают.
+            GIDSignIn.sharedInstance.signOut()
+            errorMessage = Self.mapGoogleSignInError(error)
+        }
+    }
+
+    /// Человекочитаемые сообщения для ошибок GIDSignIn вместо
+    /// сырых `com.google.GIDSignIn error -N`.
+    private static func mapGoogleSignInError(_ error: Error) -> String {
+        let nsError = error as NSError
+        guard nsError.domain == kGIDSignInErrorDomain else {
+            return error.localizedDescription
+        }
+        switch nsError.code {
+        case GIDSignInError.canceled.rawValue:
+            return "Вход через Google отменён."
+        case GIDSignInError.keychain.rawValue:
+            return "Не удалось сохранить сессию Google (Keychain)."
+        case GIDSignInError.hasNoAuthInKeychain.rawValue:
+            return "Сессия Google не найдена. Войдите заново."
+        case GIDSignInError.refreshTokenExpired.rawValue:
+            return "Сессия Google истекла. Войдите заново."
+        case GIDSignInError.scopesAlreadyGranted.rawValue:
+            return "Запрошенные доступы уже выданы."
+        default:
+            return error.localizedDescription
         }
     }
     func signUp(
@@ -325,6 +384,21 @@ final class AuthViewModel: ObservableObject {
         otpService.isTwoFactorEnabled = false
     }
 
+    // MARK: - Profile
+
+    @discardableResult
+    func updateProfile(name: String) async -> Bool {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorMessage = "Введите имя."
+            return false
+        }
+
+        return await performAuthAction {
+            currentUser = try await authRepository.updateProfile(name: trimmedName)
+        }
+    }
+
     // MARK: - Sign Out
 
     func signOut() async {
@@ -341,10 +415,11 @@ final class AuthViewModel: ObservableObject {
         successMessage = nil
     }
 
+    @discardableResult
     private func performAuthAction(
         operation: () async throws -> Void
-    ) async {
-        guard !isLoading else { return }
+    ) async -> Bool {
+        guard !isLoading else { return false }
 
         isLoading = true
         errorMessage = nil
@@ -356,8 +431,10 @@ final class AuthViewModel: ObservableObject {
 
         do {
             try await operation()
+            return true
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 

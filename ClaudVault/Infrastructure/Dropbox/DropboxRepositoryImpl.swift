@@ -1,6 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 import SwiftyDropbox
+import OSLog
 
 /// Реализация `CloudStorageRepository` поверх SwiftyDropbox.
 ///
@@ -8,6 +9,11 @@ import SwiftyDropbox
 /// он стабилен между запросами и подходит для `getMetadata`/`deleteV2`,
 /// в отличие от file id, который требует других эндпоинтов.
 final class DropboxRepositoryImpl: CloudStorageRepository {
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "dropbox"
+    )
 
     private let authManager: DropboxAuthManager
 
@@ -26,7 +32,7 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
     }
 
     func signOut() async throws {
-        authManager.signOut()
+        try await authManager.signOut()
     }
 
     // MARK: - Files
@@ -55,14 +61,10 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
         } catch let error as CallError<Files.ListFolderError> {
-            #if DEBUG
-            print("[Dropbox] listFolder(path: \(path)) failed: \(error)")
-            #endif
+            Self.logger.debug("listFolder failed")
             throw DropboxAuthManager.mapError(error)
         } catch let error as CallError<Files.ListFolderContinueError> {
-            #if DEBUG
-            print("[Dropbox] listFolderContinue failed: \(error)")
-            #endif
+            Self.logger.debug("listFolderContinue failed")
             throw DropboxAuthManager.mapError(error)
         }
     }
@@ -102,6 +104,16 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
         }
     }
 
+    /// Файлы больше этого порога грузятся через upload-сессию:
+    /// `/files/upload` имеет жёсткий лимит ~150 МБ (фото ProRAW,
+    /// видео), а сессия — до 350 ГБ.
+    private static let sessionUploadThreshold: Int64 = 64 * 1024 * 1024
+
+    /// Целевой размер фрагмента upload-сессии в стриминговой
+    /// загрузке: источник буферизуется до этого размера,
+    /// чтобы не слать appendV2 на каждый мелкий кусок.
+    private static let streamedChunkSize = 8 * 1024 * 1024
+
     /// `progressHandler` получает долю завершённой загрузки (0...1)
     /// по мере передачи данных.
     func uploadFile(
@@ -109,11 +121,37 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
         parentFolderID: String?,
         progressHandler: (@Sendable (Double) -> Void)?
     ) async throws -> CloudFile {
-        let client = try authorizedClient()
+        // Отмена из Live Activity до старта передачи.
+        try UploadCancellation.checkCancellation()
+
         let path = Self.joinPath(
             parent: parentFolderID,
             name: fileURL.lastPathComponent
         )
+
+        guard let attributes = try? FileManager.default.attributesOfItem(
+            atPath: fileURL.path
+        ),
+              let size = (attributes[.size] as? NSNumber)?.int64Value else {
+            throw CloudStorageError.operationFailed("Файл недоступен для чтения.")
+        }
+
+        // Большие файлы — только через upload-сессию: простой
+        // /files/upload отклоняет всё, что больше ~150 МБ.
+        if size > Self.sessionUploadThreshold {
+            let session = DropboxTransferSession.begin(commitPath: path)
+            let source = FileChunkSource(fileURL: fileURL, totalSize: size)
+            return try await ChunkedUploadRunner.run(
+                source: source,
+                session: session,
+                chunkSize: 8 * 1024 * 1024,
+                shouldCancel: { UploadCancellation.isCancelledForCurrentTask() }
+            ) { offset in
+                progressHandler?(min(1.0, Double(offset) / Double(max(size, 1))))
+            }
+        }
+
+        let client = try authorizedClient()
 
         do {
             var request = client.files.upload(
@@ -136,6 +174,59 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
             return file
         } catch let error as CallError<Files.UploadError> {
             throw DropboxAuthManager.mapError(error)
+        }
+    }
+
+    /// Upload-сессия Dropbox для TransferEngine.
+    /// Состояние — `dbx:<sessionId>:<offset>`; без sessionId
+    /// (сессия ещё не начата) состояние пустое и resume
+    /// восстанавливает только offset=0.
+    func makeUploadSession(
+        name: String,
+        mimeType: String,
+        parentFolderID: String?,
+        sizeBytes: Int64,
+        resumeState: String?
+    ) async throws -> (session: any TransferSession, state: String)? {
+        let path = Self.joinPath(parent: parentFolderID, name: name)
+
+        if let resumeState, !resumeState.isEmpty {
+            guard let session = DropboxTransferSession.restore(
+                resumeState: resumeState,
+                commitPath: path
+            ) else {
+                return nil
+            }
+            session.setCommitPath(path)
+            return (session, session.stateValue)
+        }
+
+        let session = DropboxTransferSession.begin(commitPath: path)
+        return (session, session.stateValue)
+    }
+
+    /// Временная ссылка Dropbox (~4 ч) как Range-источник
+    /// cloud-to-cloud передачи. Ссылка без авторизации.
+    func makeChunkSource(for file: CloudFile) async throws -> (any ChunkSource)? {
+        guard let sizeBytes = file.sizeBytes, sizeBytes >= 0 else {
+            return nil
+        }
+        let client = try authorizedClient()
+
+        do {
+            let result = try await client.files
+                .getTemporaryLink(path: file.id)
+                .response()
+            guard let url = URL(string: result.link) else {
+                return nil
+            }
+            return HTTPRangeChunkSource(
+                url: url,
+                totalSize: sizeBytes,
+                headersProvider: { [:] }
+            )
+        } catch {
+            return nil
         }
     }
 
@@ -174,12 +265,31 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
     ) async throws {
         let client = try authorizedClient()
 
+        // SDK пишет по `overwrite: true` прямо в destination —
+        // существующий файл молча затирался бы. Скачиваем во
+        // временный соседний файл и атомарно подменяем цель
+        // через AtomicFileMove: при сбое исходный файл цел.
+        let directory = destination.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let staging = directory.appendingPathComponent(
+            ".clv-dl-\(UUID().uuidString)",
+            isDirectory: false
+        )
+
         do {
             _ = try await client.files
-                .download(path: id, overwrite: true, destination: destination)
+                .download(path: id, overwrite: true, destination: staging)
                 .response()
+            try AtomicFileMove.moveIntoPlace(staging, destination: destination)
         } catch let error as CallError<Files.DownloadError> {
+            try? FileManager.default.removeItem(at: staging)
             throw DropboxAuthManager.mapError(error)
+        } catch {
+            try? FileManager.default.removeItem(at: staging)
+            throw error
         }
     }
 
@@ -227,66 +337,75 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
         let commit = Files.CommitInfo(path: path, mode: .overwrite)
 
         do {
-            guard let firstChunk = try await readChunk() else {
-                // Пустой файл: start + finish без данных.
-                let started = try await client.files
-                    .uploadSessionStart(close: false, input: Data())
-                    .response()
-                let metadata = try await client.files
-                    .uploadSessionFinish(
-                        cursor: Files.UploadSessionCursor(
-                            sessionId: started.sessionId,
-                            offset: 0
-                        ),
-                        commit: commit,
-                        input: Data()
-                    )
-                    .response()
-                guard let file = Self.mapMetadata(metadata) else {
-                    throw CloudStorageError.invalidResponse
+            // Источник буферизуется до ~8 МиБ на фрагмент:
+            // appendV2 на каждый мелкий кусок readChunk давал
+            // бы шторм запросов. Последний фрагмент (включая
+            // пустой для файла без остатка) уходит через finish.
+            var pending = Data()
+            var sourceEOF = false
+            var sessionId: String?
+            var offset: UInt64 = 0
+            let total = max(Int64(sizeBytes ?? 0), 1)
+
+            while true {
+                while !sourceEOF && pending.count < Self.streamedChunkSize {
+                    guard let piece = try await readChunk(),
+                          !piece.isEmpty else {
+                        sourceEOF = true
+                        break
+                    }
+                    pending.append(piece)
                 }
-                return file
-            }
 
-            let started = try await client.files
-                .uploadSessionStart(close: false, input: firstChunk)
-                .response()
-            var offset = UInt64(firstChunk.count)
+                if sessionId == nil {
+                    // Первый фрагмент открывает сессию — в том
+                    // числе пустой для файла нулевого размера.
+                    let started = try await client.files
+                        .uploadSessionStart(close: false, input: pending)
+                        .response()
+                    sessionId = started.sessionId
+                    offset = UInt64(pending.count)
+                    pending.removeAll(keepingCapacity: true)
+                    continue
+                }
 
-            // Остальные чанки — через appendV2, коммит — finish
-            // с пустым телом (все данные уже в сессии).
-            while let chunk = try await readChunk() {
+                guard let sessionId else { break }
+
+                if sourceEOF {
+                    // Финальный фрагмент коммитит файл.
+                    let metadata = try await client.files
+                        .uploadSessionFinish(
+                            cursor: Files.UploadSessionCursor(
+                                sessionId: sessionId,
+                                offset: offset
+                            ),
+                            commit: commit,
+                            input: pending
+                        )
+                        .response()
+                    guard let file = Self.mapMetadata(metadata) else {
+                        throw CloudStorageError.invalidResponse
+                    }
+                    progressHandler?(1.0)
+                    return file
+                }
+
                 _ = try await client.files
                     .uploadSessionAppendV2(
                         cursor: Files.UploadSessionCursor(
-                            sessionId: started.sessionId,
+                            sessionId: sessionId,
                             offset: offset
                         ),
                         close: false,
-                        input: chunk
+                        input: pending
                     )
                     .response()
-                offset += UInt64(chunk.count)
-                let total = max(Int64(sizeBytes ?? 0), 1)
+                offset += UInt64(pending.count)
+                pending.removeAll(keepingCapacity: true)
                 progressHandler?(min(1.0, Double(offset) / Double(total)))
             }
 
-            let metadata = try await client.files
-                .uploadSessionFinish(
-                    cursor: Files.UploadSessionCursor(
-                        sessionId: started.sessionId,
-                        offset: offset
-                    ),
-                    commit: commit,
-                    input: Data()
-                )
-                .response()
-
-            guard let file = Self.mapMetadata(metadata) else {
-                throw CloudStorageError.invalidResponse
-            }
-            progressHandler?(1.0)
-            return file
+            throw CloudStorageError.invalidResponse
         } catch let error as CallError<Files.UploadSessionStartError> {
             throw DropboxAuthManager.mapError(error)
         } catch let error as CallError<Files.UploadSessionAppendError> {
@@ -312,6 +431,49 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
             }
             return CloudMediaStream(url: url, headers: [:])
         } catch let error as CallError<Files.GetTemporaryLinkError> {
+            throw DropboxAuthManager.mapError(error)
+        }
+    }
+
+    /// Переименование через `files/move_v2` в тот же родительский
+    /// путь. `CloudFile.id` у Dropbox — это путь, поэтому после
+    /// переименования id меняется и возвращается в ответе —
+    /// вызывающий код обязан обновить `cloudObjectID` у версий.
+    func renameFile(id: String, name: String) async throws -> CloudFile {
+        let client = try authorizedClient()
+
+        do {
+            // Сначала получаем актуальный путь: `id` может быть
+            // `pathDisplay`, `pathLower` или `id:…` для
+            // неприкреплённых shared-объектов.
+            let metadata = try await client.files
+                .getMetadata(path: id)
+                .response()
+
+            guard let sourcePath = metadata.pathDisplay
+                    ?? metadata.pathLower,
+                  !sourcePath.hasPrefix("id:") else {
+                throw CloudStorageError.operationFailed(
+                    "Не удалось определить путь файла для переименования."
+                )
+            }
+
+            let parent = (sourcePath as NSString).deletingLastPathComponent
+            let newPath = parent.isEmpty || parent == "/"
+                ? "/\(name)"
+                : "\(parent)/\(name)"
+
+            let result = try await client.files
+                .moveV2(fromPath: sourcePath, toPath: newPath)
+                .response()
+
+            guard let file = Self.mapMetadata(result.metadata) else {
+                throw CloudStorageError.invalidResponse
+            }
+            return file
+        } catch let error as CallError<Files.GetMetadataError> {
+            throw DropboxAuthManager.mapError(error)
+        } catch let error as CallError<Files.RelocationError> {
             throw DropboxAuthManager.mapError(error)
         }
     }
@@ -406,13 +568,20 @@ final class DropboxRepositoryImpl: CloudStorageRepository {
     private static func mapMetadata(_ metadata: Files.Metadata) -> CloudFile? {
         switch metadata {
         case let file as Files.FileMetadata:
+            var hashes: [ContentHash] = []
+            if let contentHash = file.contentHash, !contentHash.isEmpty {
+                hashes.append(
+                    ContentHash(algorithm: .dropboxContent, value: contentHash)
+                )
+            }
             return CloudFile(
                 id: pathID(for: file),
                 name: file.name,
                 mimeType: mimeType(for: file.name),
                 sizeBytes: Int64(min(file.size, UInt64(Int64.max))),
                 modifiedAt: file.serverModified,
-                duration: videoDuration(from: file)
+                duration: videoDuration(from: file),
+                contentHashes: hashes
             )
         case let folder as Files.FolderMetadata:
             return mapFolder(folder)

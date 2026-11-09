@@ -574,7 +574,7 @@ struct StoragesView: View {
                 HStack(spacing: 10) {
                     ProgressView()
                         .tint(.cyan)
-                    Text("Перенос: \(viewModel.transferFileName ?? "")")
+                    Text("Передача: \(viewModel.transferFileName ?? "")")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.white)
                         .lineLimit(1)
@@ -582,6 +582,15 @@ struct StoragesView: View {
                     Text("\(Int(viewModel.transferProgress * 100))%")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.cyan)
+                    Button("Отмена") {
+                        viewModel.cancelTransfer()
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.15))
+                    .clipShape(Capsule())
                 }
                 .padding(12)
                 .background(Color.cyan.opacity(0.1))

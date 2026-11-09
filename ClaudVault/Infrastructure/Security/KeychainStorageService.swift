@@ -8,6 +8,7 @@ private nonisolated enum KeychainConstants {
 enum KeychainStorageError: LocalizedError {
     case unexpectedStatus(OSStatus)
     case invalidStoredSession
+    case missingOwnerID
 
     var errorDescription: String? {
         switch self {
@@ -15,25 +16,16 @@ enum KeychainStorageError: LocalizedError {
             return "Keychain error (OSStatus: \(status))"
         case .invalidStoredSession:
             return "Stored cloud session is invalid"
+        case .missingOwnerID:
+            return "Cloud session has no owner"
         }
     }
 }
-
-/// Низкоуровневое синхронное Key-Value хранилище поверх `SecItem`.
-///
-/// Используется и `KeychainStorageService` (нормализованные
-/// `CloudAccountSession`-записи), и синхронными адаптерами
-/// облачных SDK (SwiftyDropbox `SecureStorageAccess`), которым
-/// actor-изоляция недоступна. Все операции сериализуются
-/// через `NSLock`; `Security` framework сам по себе потокобезопасен.
 nonisolated enum KeychainItemStore {
-
     private static let lock = NSLock()
-
     static func save(_ data: Data, account: String) throws {
         lock.lock()
         defer { lock.unlock() }
-
         let query = baseQuery(account: account)
         let updateStatus = SecItemUpdate(
             query as CFDictionary,
@@ -43,21 +35,30 @@ nonisolated enum KeychainItemStore {
                     kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             ] as CFDictionary
         )
-
         if updateStatus == errSecSuccess {
             return
         }
-
         guard updateStatus == errSecItemNotFound else {
             throw KeychainStorageError.unexpectedStatus(updateStatus)
         }
-
         var insert = query
         insert[kSecValueData as String] = data
         insert[kSecAttrAccessible as String] =
             kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-
-        let addStatus = SecItemAdd(insert as CFDictionary, nil)
+        var addStatus = SecItemAdd(insert as CFDictionary, nil)
+        if addStatus == errSecDuplicateItem {
+            // Гонка update→add: параллельный writer вставил запись
+            // между нашими вызовами. Один повторный update —
+            // без цикла и без бесконечных retry.
+            addStatus = SecItemUpdate(
+                query as CFDictionary,
+                [
+                    kSecValueData as String: data,
+                    kSecAttrAccessible as String:
+                        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                ] as CFDictionary
+            )
+        }
         guard addStatus == errSecSuccess else {
             throw KeychainStorageError.unexpectedStatus(addStatus)
         }
@@ -79,6 +80,29 @@ nonisolated enum KeychainItemStore {
         return data
     }
 
+    /// Как `load`, но отличает «записи нет» (`nil`) от ошибок
+    /// Keychain (`throw`) — нужна местам, где повреждённая или
+    /// недоступная запись не должна маскироваться под её отсутствие.
+    static func loadResult(account: String) throws -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        var query = baseQuery(account: account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
+            return nil
+        }
+        guard status == errSecSuccess,
+              let data = result as? Data else {
+            throw KeychainStorageError.unexpectedStatus(status)
+        }
+        return data
+    }
+
     static func delete(account: String) throws {
         lock.lock()
         defer { lock.unlock() }
@@ -90,6 +114,13 @@ nonisolated enum KeychainItemStore {
     }
 
     static func allData() -> [Data] {
+        (try? allDataResult()) ?? []
+    }
+
+    /// Как `allData`, но отличает «записей нет» (`[]`) от ошибок
+    /// Keychain (`throw`) — нужно критическим путям, где временная
+    /// недоступность хранилища не должна выглядеть как пустой стор.
+    static func allDataResult() throws -> [Data] {
         lock.lock()
         defer { lock.unlock() }
 
@@ -98,14 +129,25 @@ nonisolated enum KeychainItemStore {
         query[kSecMatchLimit as String] = kSecMatchLimitAll
 
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let items = result as? [Data] else {
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
             return []
+        }
+        guard status == errSecSuccess,
+              let items = result as? [Data] else {
+            throw KeychainStorageError.unexpectedStatus(status)
         }
         return items
     }
 
     static func allAccounts() -> [String] {
+        (try? allAccountsResult()) ?? []
+    }
+
+    /// Как `allAccounts`, но пробрасывает ошибки Keychain: иначе
+    /// `errSecInteractionNotAllowed`/другой сбой неотличим от
+    /// отсутствия записей, и cleanup может удалить валидные данные.
+    static func allAccountsResult() throws -> [String] {
         lock.lock()
         defer { lock.unlock() }
 
@@ -114,9 +156,13 @@ nonisolated enum KeychainItemStore {
         query[kSecMatchLimit as String] = kSecMatchLimitAll
 
         var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let items = result as? [[String: Any]] else {
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound {
             return []
+        }
+        guard status == errSecSuccess,
+              let items = result as? [[String: Any]] else {
+            throw KeychainStorageError.unexpectedStatus(status)
         }
         return items.compactMap { $0[kSecAttrAccount as String] as? String }
     }
@@ -147,20 +193,6 @@ nonisolated enum KeychainItemStore {
         return query
     }
 }
-
-/// Потокобезопасное хранилище сессий облачных аккаунтов.
-///
-/// Единая точка хранения токенов Google Drive, Dropbox и OneDrive:
-/// все записи — generic-password items в системном Keychain
-/// с сервисом `com.claudvault.storage.auth`, доступностью
-/// `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (не попадает
-/// в бэкапы/миграции) и Data Protection Keychain на macOS.
-///
-/// `CloudAccountSession`-записи — нормализованный индекс
-/// (`<provider>|<email>`). Сырые SDK-токены (например,
-/// `DropboxAccessToken` под ключом `dropbox-sdk|<uid>`)
-/// лежат рядом в том же сервисе, но в `listAllSessions()`
-/// не попадают, т.к. не декодируются в `CloudAccountSession`.
 actor KeychainStorageService {
     private static let shared = KeychainStorageService()
 
@@ -176,8 +208,15 @@ actor KeychainStorageService {
         .shared
     }
 
+    /// Сохраняет сессию под ключом `<ownerID>|<provider>|<email>`.
+    /// Сессия без `ownerID` не записывается — несуществующий
+    /// владелец означал бы утечку токенов между аккаунтами.
     func saveSession(_ session: CloudAccountSession) throws {
+        guard !session.ownerID.isEmpty else {
+            throw KeychainStorageError.missingOwnerID
+        }
         let account = Self.accountKey(
+            ownerID: session.ownerID,
             provider: session.provider,
             userEmail: session.userEmail
         )
@@ -187,9 +226,15 @@ actor KeychainStorageService {
 
     func loadSession(
         for provider: CloudProviderType,
-        email: String
+        email: String,
+        ownerID: String
     ) -> CloudAccountSession? {
-        let account = Self.accountKey(provider: provider, userEmail: email)
+        guard !ownerID.isEmpty else { return nil }
+        let account = Self.accountKey(
+            ownerID: ownerID,
+            provider: provider,
+            userEmail: email
+        )
         guard let data = KeychainItemStore.load(account: account) else {
             return nil
         }
@@ -198,27 +243,84 @@ actor KeychainStorageService {
 
     func deleteSession(
         for provider: CloudProviderType,
-        email: String
+        email: String,
+        ownerID: String
     ) throws {
-        let account = Self.accountKey(provider: provider, userEmail: email)
+        guard !ownerID.isEmpty else { return }
+        let account = Self.accountKey(
+            ownerID: ownerID,
+            provider: provider,
+            userEmail: email
+        )
         try KeychainItemStore.delete(account: account)
     }
 
     /// Удаляет все `CloudAccountSession`-записи провайдера
-    /// (любой email). Удобно для sign-out, когда email неизвестен.
-    func deleteSessions(for provider: CloudProviderType) throws {
-        for session in listAllSessions() where session.provider == provider {
-            try deleteSession(for: provider, email: session.userEmail)
+    /// текущего пользователя (любой email). Удобно для sign-out,
+    /// когда email неизвестен. Чужие сессии не затрагиваются.
+    func deleteSessions(
+        for provider: CloudProviderType,
+        ownerID: String
+    ) throws {
+        for session in listAllSessions(ownerID: ownerID)
+        where session.provider == provider {
+            try deleteSession(
+                for: provider,
+                email: session.userEmail,
+                ownerID: ownerID
+            )
         }
     }
 
-    func listAllSessions() -> [CloudAccountSession] {
-        KeychainItemStore.allData().compactMap { data in
-            try? decoder.decode(CloudAccountSession.self, from: data)
+    /// Все `CloudAccountSession`-записи указанного пользователя.
+    /// Записи других владельцев и записи без ownerID не возвращаются.
+    func listAllSessions(ownerID: String) -> [CloudAccountSession] {
+        guard !ownerID.isEmpty else { return [] }
+        // allData() возвращает только значения, поэтому принадлежность
+        // проверяем по ownerID внутри самого payload — этого достаточно:
+        // чужие и бесхозные ("") записи отбрасываются декодером-фильтром.
+        return KeychainItemStore.allData().compactMap { data in
+            guard let session = try? decoder.decode(
+                CloudAccountSession.self, from: data
+            ), session.ownerID == ownerID else {
+                return nil
+            }
+            return session
         }
+    }
+
+    /// Удаляет `CloudAccountSession`-записи старого формата
+    /// `<provider>|<email>` — без владельца они содержат
+    /// access/refresh-токены и не могут быть безопасно привязаны
+    /// ни к одному аккаунту. Вызывается один раз при входе
+    /// пользователя — см. `UserSessionCoordinator`. Пользователю
+    /// достаточно один раз переподключить облачные сервисы.
+    @discardableResult
+    func deleteLegacySessions() -> Int {
+        var deleted = 0
+        for account in KeychainItemStore.allAccounts() {
+            // Новый формат: "<ownerID>|<provider>|<email>" — 2 разделителя.
+            // Провайдерские служебные ключи ("dropbox-sdk|…",
+            // "google-restored|…", "onedrive|tokens|…") отсекаются
+            // проверкой первого компонента на CloudProviderType
+            // и неудачным декодированием ниже.
+            let parts = account.split(separator: "|", omittingEmptySubsequences: false)
+            guard parts.count == 2,
+                  CloudProviderType(rawValue: String(parts[0])) != nil,
+                  let data = KeychainItemStore.load(account: account),
+                  let session = try? decoder.decode(
+                      CloudAccountSession.self, from: data
+                  ), session.ownerID.isEmpty else {
+                continue
+            }
+            try? KeychainItemStore.delete(account: account)
+            deleted += 1
+        }
+        return deleted
     }
 
     private static func accountKey(
+        ownerID: String,
         provider: CloudProviderType,
         userEmail: String
     ) -> String {
@@ -226,6 +328,6 @@ actor KeychainStorageService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
-        return "\(provider.rawValue)|\(normalizedEmail)"
+        return "\(ownerID)|\(provider.rawValue)|\(normalizedEmail)"
     }
 }

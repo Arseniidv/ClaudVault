@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import CryptoKit
 import FirebaseAuth
 import FirebaseFirestore
@@ -29,9 +30,15 @@ final class QRVerificationService {
 
     /// Общий контекст HKDF — одинаков на обоих устройствах.
     private static let hkdfSharedInfo = Data("ClaudVault.DeviceTransfer.v1".utf8)
-    /// Таймаут обращений к Firestore: запись/чтение без серверного
-    /// подтверждения не должна вешать UI бесконечно.
-    private static let backendTimeout: TimeInterval = 15
+    /// Таймаут обращений к Firestore/Functions: запись/чтение без
+    /// серверного подтверждения не должна вешать UI бесконечно.
+    /// 30 с — с запасом на холодный канал и медленную сеть.
+    private static let backendTimeout: TimeInterval = 30
+
+    private static let logger = Logger(
+        subsystem: "ClaudVault",
+        category: "device-transfer"
+    )
 
     private let firestore: Firestore
     private let collectionName = "qr_verification_sessions"
@@ -40,6 +47,13 @@ final class QRVerificationService {
     /// Хранится только в памяти — на диск не пишется.
     private var pendingGeneratorKey: Curve25519.KeyAgreement.PrivateKey?
     private var pendingSessionID: String?
+    /// Счётчик поколений сессии генератора. `cancelGeneratorSession`
+    /// увеличивает его, поэтому `beginGeneratorSession`, завершившийся
+    /// после отмены или после старта более новой сессии, не может
+    /// перезаписать `pendingSessionID`/`pendingGeneratorKey` чужими
+    /// ключами — такой «запоздавший» запуск удаляет свой документ
+    /// и завершается ошибкой.
+    private var generatorEpoch = 0
     private var completionContinuation: CheckedContinuation<CloudTokenPayload, Error>?
     private var activeListener: ListenerRegistration?
     private var timeoutTask: Task<Void, Never>?
@@ -47,9 +61,6 @@ final class QRVerificationService {
     init(firestore: Firestore = .firestore()) {
         self.firestore = firestore
     }
-
-    // MARK: - Types
-
     /// Информация о сессии для доверенного устройства (сканер).
     struct ScannerSessionInfo {
         let sessionID: String
@@ -60,9 +71,6 @@ final class QRVerificationService {
     }
 
     // MARK: - Generator (новое устройство)
-
-    /// Создаёт сессию верификации и возвращает URL для QR-кода.
-    /// Требуется авторизация в Firebase — документ привязывается к uid.
     func beginGeneratorSession() async throws -> URL {
         guard let uid = Auth.auth().currentUser?.uid else {
             throw DeviceTransferError.notAuthenticated
@@ -70,6 +78,7 @@ final class QRVerificationService {
 
         cancelGeneratorSession()
 
+        let epoch = generatorEpoch
         let privateKey = Curve25519.KeyAgreement.PrivateKey()
         let sessionID = UUID().uuidString
         let publicKeyB64 = privateKey.publicKey.rawRepresentation
@@ -91,10 +100,12 @@ final class QRVerificationService {
                 ])
             }
         } catch DeviceTransferError.backendUnavailable {
-            // Запись могла уйти на сервер с опозданием —
-            // удаление встанет в очередь после setData.
-            sessionDocument(sessionID).delete { _ in }
+            try? await sessionDocument(sessionID).delete()
             throw DeviceTransferError.backendUnavailable
+        }
+        guard epoch == generatorEpoch, !Task.isCancelled else {
+            try? await sessionDocument(sessionID).delete()
+            throw DeviceTransferError.sessionCancelled
         }
 
         pendingGeneratorKey = privateKey
@@ -154,6 +165,8 @@ final class QRVerificationService {
     /// Отменяет активную сессию генератора: удаляет слушатель
     /// и временный документ из Firestore.
     func cancelGeneratorSession() {
+        // Инвалидируем любой ещё не завершившийся beginGeneratorSession.
+        generatorEpoch += 1
         activeListener?.remove()
         activeListener = nil
         timeoutTask?.cancel()
@@ -177,6 +190,9 @@ final class QRVerificationService {
         sessionID: String
     ) {
         if let error {
+            Self.logger.error(
+                "Generator snapshot listener error: \(error.localizedDescription, privacy: .public)"
+            )
             finishGenerator(throwing: error)
             return
         }
@@ -319,14 +335,22 @@ final class QRVerificationService {
         // Запись approved-пакета выполняет только Cloud Function:
         // Firestore Rules запрещают клиентский update этой коллекции,
         // поэтому подмена/гонка исключены на уровне базы.
-        _ = try await Functions.functions().httpsCallable(
-            "submitDeviceTransferPayload"
-        ).call([
-            "sessionID": info.sessionID,
-            "trustedPublicKey": ownKey.publicKey.rawRepresentation
-                .base64EncodedString(),
-            "encryptedPayload": combined.base64EncodedString()
-        ])
+        // Обернуто в таймаут: зависший вызов Functions не должен
+        // оставлять сканер на «Отправляем пакет…» бесконечно.
+        do {
+            _ = try await withBackendTimeout {
+                try await Functions.functions().httpsCallable(
+                    "submitDeviceTransferPayload"
+                ).call([
+                    "sessionID": info.sessionID,
+                    "trustedPublicKey": ownKey.publicKey.rawRepresentation
+                        .base64EncodedString(),
+                    "encryptedPayload": combined.base64EncodedString()
+                ])
+            }
+        } catch DeviceTransferError.backendUnavailable {
+            throw DeviceTransferError.submissionFailed
+        }
     }
 
     /// Удаляет временный документ сессии (отмена с любой стороны).
@@ -472,6 +496,7 @@ enum DeviceTransferError: LocalizedError {
     case submissionFailed
     case backendUnavailable
     case unsupportedPayloadVersion
+    case storageFailed
 
     var errorDescription: String? {
         switch self {
@@ -499,6 +524,8 @@ enum DeviceTransferError: LocalizedError {
             return "Firestore не отвечает. Проверьте, что база данных создана в консоли Firebase и правила безопасности задеплоены."
         case .unsupportedPayloadVersion:
             return "Формат данных переноса не поддерживается этой версией приложения."
+        case .storageFailed:
+            return "Не удалось сохранить перенесённые подключения в Keychain."
         }
     }
 }

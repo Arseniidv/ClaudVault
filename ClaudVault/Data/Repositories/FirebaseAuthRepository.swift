@@ -38,6 +38,21 @@ final class FirebaseAuthRepository: AuthRepository, @unchecked Sendable {
         }
     }
     
+    func updateProfile(name: String) async throws -> AuthUser {
+        guard let firebaseUser = auth.currentUser else {
+            throw AuthError.sessionExpired
+        }
+
+        do {
+            let changeRequest = firebaseUser.createProfileChangeRequest()
+            changeRequest.displayName = name
+            try await changeRequest.commitChanges()
+            return Self.mapUser(firebaseUser)
+        } catch {
+            throw mapError(error)
+        }
+    }
+
     func resetPassword(email: String) async throws {
         do {
             try await auth.sendPasswordReset(withEmail: email)
