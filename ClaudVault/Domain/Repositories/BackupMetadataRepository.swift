@@ -1,14 +1,19 @@
 import Foundation
-import SwiftData
 
+/// Репозиторий метаданных резервных копий.
+///
+/// Платформенно-нейтральный протокол: iOS-реализация работает
+/// поверх SwiftData (`BackupMetadataRepositoryImpl`), Android —
+/// поверх SkipSQL/собственного хранилища.
+///
+/// `modelContext` намеренно не входит в протокол — он нужен
+/// только SwiftData-реализации и остаётся деталью impl'а.
 @MainActor
-protocol BackupMetadataRepository {
-    var modelContext:ModelContext{get}
+public protocol BackupMetadataRepository {
     func fetchRecords() throws -> [BackupRecord]
     func fetchRecords(id: UUID) -> BackupRecord?
     func fetchRecord(bySource sourceIdentifier: String) throws -> BackupRecord?
     func deleteRecord(id: UUID) throws
-    func saveVersion(_ version: BackupVersion) throws
     func saveVersion(_ version: BackupVersion, for recordID: UUID) throws
     /// Обновляет существующую версию (например, новый cloudObjectID
     /// после переноса между облаками). Если версии нет — ничего не делает.
@@ -19,21 +24,7 @@ protocol BackupMetadataRepository {
     func fetchVersions(for recordID: UUID) throws -> [BackupVersion]
     func calculateUsedStorage() throws -> Int64
 }
-extension BackupMetadataRepository {
-    func calculateUsedStorage() throws -> Int64 {
-        guard let ownerID = CurrentUserContext.shared.ownerID else {
-            return 0
-        }
-        let descriptor = FetchDescriptor<BackupVersionModel>(
-            predicate: #Predicate { $0.ownerID == ownerID }
-        )
-        let versions = try modelContext.fetch(descriptor)
 
-        return versions.reduce(Int64.zero) { total, version in
-            total + version.fileSize
-        }
-    }
-}
-enum BackupMetadataRepositoryError: Error {
+public enum BackupMetadataRepositoryError: Error {
     case recordNotFound
 }

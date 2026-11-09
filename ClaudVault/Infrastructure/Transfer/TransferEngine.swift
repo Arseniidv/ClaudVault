@@ -4,7 +4,7 @@ import Foundation
 /// журнал → верификация. Используется для загрузки локальных
 /// файлов и cloud-to-cloud переноса.
 @MainActor
-final class TransferEngine {
+public final class TransferEngine: BackupTransferEngine {
 
     private let journal: TransferJournal
     private let chunkSize: Int64
@@ -12,7 +12,7 @@ final class TransferEngine {
     /// Активная запись журнала текущей передачи (для отмены).
     private(set) var activeRecordID: UUID?
     /// Вызывается при изменении прогресса активной передачи (0...1).
-    var onProgress: (@Sendable (Double) -> Void)?
+    public var onProgress: (@Sendable (Double) -> Void)?
 
     /// Флаг отмены, выставляемый `cancelActive()`.
     ///
@@ -22,7 +22,7 @@ final class TransferEngine {
     /// движок проверяет этот флаг на каждой итерации.
     private var cancelRequested = false
 
-    init(journal: TransferJournal, chunkSize: Int64 = 8 * 1024 * 1024) {
+    public init(journal: TransferJournal, chunkSize: Int64 = 8 * 1024 * 1024) {
         self.journal = journal
         self.chunkSize = chunkSize
     }
@@ -32,7 +32,7 @@ final class TransferEngine {
     /// Загружает локальный файл в облако чанками с журналированием.
     /// При `nil` от `makeUploadSession` бросает `.notImplemented` —
     /// вызывающий код откатывается на `repository.uploadFile`.
-    func uploadFile(
+    public func uploadFile(
         fileURL: URL,
         name: String,
         mimeType: String,
@@ -86,7 +86,7 @@ final class TransferEngine {
     /// верификации размера у приёмника.
     /// Бросает `.notImplemented`, если провайдеры не поддерживают
     /// chunked-передачу — вызывающий код использует fallback.
-    func transferFile(
+    public func transferFile(
         _ file: CloudFile,
         from sourceProvider: String,
         source: any CloudStorageRepository,
@@ -150,7 +150,7 @@ final class TransferEngine {
     /// `repoFor` возвращает репозиторий по `StorageProviderType.rawValue`.
     /// Записи, которые невозможно продолжить (протухшая сессия,
     /// удалённый локальный файл), помечаются `.failed`.
-    func resumePending(
+    public func resumePending(
         repoFor: (String) -> (any CloudStorageRepository)?
     ) async {
         guard let records = try? await journal.pendingRecords() else { return }
@@ -247,7 +247,7 @@ final class TransferEngine {
     /// движка проверяет на каждой итерации, и помечает запись
     /// отменённой. Остановка происходит на ближайшей границе
     /// чанка — уже отправленный провайдеру фрагмент не прерываем.
-    func cancelActive() async {
+    public func cancelActive() async {
         guard let id = activeRecordID else { return }
         cancelRequested = true
         try? await journal.setState(id: id, state: .cancelled)
@@ -399,14 +399,14 @@ final class TransferEngine {
 
 /// Общий цикл chunked-загрузки: источник → сессия → подтверждённое
 /// смещение → журнал. Не зависит от провайдера.
-enum ChunkedUploadRunner {
+public enum ChunkedUploadRunner {
 
     /// Запускает передачу до `source.totalSize`. `onConfirmedOffset`
     /// вызывается после каждого принятого провайдером фрагмента.
     /// `shouldCancel` — дополнительная проверка отмены (например,
     /// флаг `TransferEngine.cancelActive`), срабатывает на границе
     /// каждого чанка и перед `finish()`.
-    static func run(
+    public static func run(
         source: any ChunkSource,
         session: any TransferSession,
         chunkSize: Int64,

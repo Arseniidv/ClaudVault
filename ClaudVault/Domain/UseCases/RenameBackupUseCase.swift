@@ -4,14 +4,14 @@ import Foundation
 /// переименовываются через API провайдера, затем обновляется
 /// `record.fileName`. Новая версия/копия не создаётся.
 @MainActor
-final class RenameBackupUseCase {
+public final class RenameBackupUseCase {
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
     /// Репозитории всех облаков — переименование идёт в облако,
     /// указанное в `record.storageProvider`.
     private let repositories: [StorageProviderType: CloudStorageRepository]?
 
-    init(
+    public init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
         repositories: [StorageProviderType: CloudStorageRepository]? = nil
@@ -40,7 +40,7 @@ final class RenameBackupUseCase {
     ///
     /// - Returns: обновлённая запись.
     @discardableResult
-    func execute(record: BackupRecord, newName: String) async throws -> BackupRecord {
+    public func execute(record: BackupRecord, newName: String) async throws -> BackupRecord {
         var name = newName
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "/", with: "-")
@@ -99,11 +99,11 @@ final class RenameBackupUseCase {
         return updatedRecord
     }
 
-    enum RenameError: LocalizedError {
+    public enum RenameError: LocalizedError {
         case invalidName
         case cloudRenameFailed(String)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .invalidName:
                 return "Введите имя файла."

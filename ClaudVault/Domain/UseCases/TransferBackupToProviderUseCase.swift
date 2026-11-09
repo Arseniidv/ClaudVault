@@ -13,20 +13,20 @@ import Foundation
 ///    исходного облака (best-effort: дубликат безопаснее,
 ///    чем потеря данных).
 @MainActor
-final class TransferBackupToProviderUseCase {
+public final class TransferBackupToProviderUseCase {
 
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
     /// Репозитории всех облаков; `nil` — только Google Drive.
     private let repositories: [StorageProviderType: CloudStorageRepository]?
     /// nil — legacy-путь через временный файл.
-    private let transferEngine: TransferEngine?
+    private let transferEngine: (any BackupTransferEngine)?
 
-    init(
+    public init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
         repositories: [StorageProviderType: CloudStorageRepository]? = nil,
-        transferEngine: TransferEngine? = nil
+        transferEngine: (any BackupTransferEngine)? = nil
     ) {
         self.backupRepository = backupRepository
         self.cloudStorageRepository = cloudStorageRepository
@@ -45,7 +45,7 @@ final class TransferBackupToProviderUseCase {
     /// Копирует (`move == false`) или перемещает (`move == true`)
     /// все версии записи в облако `target`.
     /// `progressHandler` получает общий прогресс 0...1.
-    func execute(
+    public func execute(
         record: BackupRecord,
         to target: StorageProviderType,
         move: Bool,

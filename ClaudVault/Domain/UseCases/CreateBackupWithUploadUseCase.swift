@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class CreateBackupWithUploadUseCase {
+public final class CreateBackupWithUploadUseCase {
     private let backupRepository: BackupMetadataRepository
     private let cloudStorageRepository: CloudStorageRepository
     /// Репозитории всех подключённых облаков — загрузка идёт
@@ -12,9 +12,9 @@ final class CreateBackupWithUploadUseCase {
     private let uploadSessionRepository: UploadSessionRepository
     private let saveUploadSessionUseCase: SaveUploadSessionUseCase
     private let updateUploadProgressUseCase: UpdateUploadProgressUseCase
-    var errorMessage:String? = nil
+    public var errorMessage:String? = nil
 
-    init(
+    public init(
         backupRepository: BackupMetadataRepository,
         cloudStorageRepository: CloudStorageRepository,
         repositories: [StorageProviderType: CloudStorageRepository]? = nil,
@@ -49,7 +49,7 @@ final class CreateBackupWithUploadUseCase {
     /// - Если для `sourceIdentifier` уже есть запись и последняя версия
     ///   имеет тот же SHA-256 — новая копия не создаётся.
     /// - Прогресс передачи отражается в `UploadSession` (Active Transfers).
-    func execute(
+    public func execute(
         fileName: String,
         sourceIdentifier: String,
         fileURL: URL,
@@ -202,12 +202,12 @@ final class CreateBackupWithUploadUseCase {
         return false
     }
 
-    enum BackupError: LocalizedError {
+    public enum BackupError: LocalizedError {
         case fileSizeUnavailable
         case hashCalculationFailed
         case uploadFailed(String)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .fileSizeUnavailable:
                 return "Не удалось получить размер файла."

@@ -2,7 +2,7 @@ import Foundation
 
 /// Удаление временных файлов чанков (ответы Range-запросов).
 enum TransferTempFiles {
-    static func remove(_ url: URL?) {
+    public static func remove(_ url: URL?) {
         guard let url else { return }
         try? FileManager.default.removeItem(at: url)
     }
@@ -12,17 +12,17 @@ enum TransferTempFiles {
 /// читают `[fileOffset, +length)` из `fileURL`, поэтому чанк
 /// отдаётся ссылкой на исходник без копирования — иначе каждый
 /// чанк писался бы на диск и читался обратно (двойной I/O).
-final class FileChunkSource: ChunkSource, @unchecked Sendable {
+public final class FileChunkSource: ChunkSource, @unchecked Sendable {
 
-    let fileURL: URL
-    let totalSize: Int64
+    public let fileURL: URL
+    public let totalSize: Int64
 
-    init(fileURL: URL, totalSize: Int64) {
+    public init(fileURL: URL, totalSize: Int64) {
         self.fileURL = fileURL
         self.totalSize = totalSize
     }
 
-    func chunk(at offset: Int64, maxLength: Int64) async throws -> ChunkPayload? {
+    public func chunk(at offset: Int64, maxLength: Int64) async throws -> ChunkPayload? {
         guard offset >= 0, offset < totalSize else { return nil }
         let length = min(maxLength, totalSize - offset)
         guard length > 0 else { return nil }
@@ -36,7 +36,7 @@ final class FileChunkSource: ChunkSource, @unchecked Sendable {
         )
     }
 
-    func discard(_ payload: ChunkPayload) async {
+    public func discard(_ payload: ChunkPayload) async {
         // Чанк — ссылка на файл-источник, удалять нечего.
     }
 }
@@ -46,15 +46,15 @@ final class FileChunkSource: ChunkSource, @unchecked Sendable {
 /// в память попадает только временный URL ответа.
 /// Заголовки запрашиваются заново на каждую попытку —
 /// токен может истечь посреди долгой передачи.
-final class HTTPRangeChunkSource: ChunkSource, @unchecked Sendable {
+public final class HTTPRangeChunkSource: ChunkSource, @unchecked Sendable {
 
-    let url: URL
-    let totalSize: Int64
+    public let url: URL
+    public let totalSize: Int64
     private let headersProvider: @Sendable () async throws -> [String: String]
     private let session: URLSession
     private let maxAttempts = 4
 
-    init(
+    public init(
         url: URL,
         totalSize: Int64,
         headersProvider: @escaping @Sendable () async throws -> [String: String],
@@ -66,7 +66,7 @@ final class HTTPRangeChunkSource: ChunkSource, @unchecked Sendable {
         self.session = session
     }
 
-    func chunk(at offset: Int64, maxLength: Int64) async throws -> ChunkPayload? {
+    public func chunk(at offset: Int64, maxLength: Int64) async throws -> ChunkPayload? {
         guard offset >= 0, offset < totalSize else { return nil }
         let length = min(maxLength, totalSize - offset)
         guard length > 0 else { return nil }
@@ -93,7 +93,7 @@ final class HTTPRangeChunkSource: ChunkSource, @unchecked Sendable {
         throw lastError
     }
 
-    func discard(_ payload: ChunkPayload) async {
+    public func discard(_ payload: ChunkPayload) async {
         if payload.isTemporary {
             TransferTempFiles.remove(payload.fileURL)
         }

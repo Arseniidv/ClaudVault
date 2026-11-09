@@ -10,27 +10,32 @@ import Foundation
 /// приложение увидит флаг при следующей проверке).
 /// Циклы передачи проверяют флаг на границе каждого чанка
 /// через `checkCancellation()` / `isCancelledForCurrentTask()`.
-enum UploadCancellation {
+public enum UploadCancellation {
 
     /// `UploadSession.id` загрузки, идущей в текущей задаче.
     /// Use case'и устанавливают его через `withValue` вокруг
     /// вызова `repository.uploadFile` — TaskLocal доезжает
     /// до асинхронных циклов провайдеров без смены сигнатур.
-    @TaskLocal static var sessionID: UUID?
+    @TaskLocal public static var sessionID: UUID?
 
     private static let cancelledKey = "cancelledUploadSessionIDs"
+
+    /// App Group ID — дублирует `WidgetStorage.appGroupID` из Shared/:
+    /// пакет не может зависеть от таргета приложения, а виджет
+    /// линкует ClaudVaultDomain и использует тот же suite.
+    private static let appGroupID = "group.com.Arseniidv.ClaudVault"
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cancelledInMemory: Set<String> = []
 
     /// Общее хранилище приложения и расширения виджета.
     private static var sharedDefaults: UserDefaults? {
-        UserDefaults(suiteName: WidgetStorage.appGroupID)
+        UserDefaults(suiteName: Self.appGroupID)
     }
 
     /// Помечает сессию отменённой. Вызывается из `AppIntent`
     /// Live Activity — может выполниться в любом из процессов.
-    static func markCancelled(_ id: UUID) {
+    public static func markCancelled(_ id: UUID) {
         let string = id.uuidString
 
         lock.lock()
@@ -48,7 +53,7 @@ enum UploadCancellation {
     /// вызывает `clear` после завершения загрузки (успех,
     /// ошибка или отмена), `LiveActivityManager` — для сессий,
     /// завершившихся без загрузки в этом процессе.
-    static func clear(_ id: UUID) {
+    public static func clear(_ id: UUID) {
         let string = id.uuidString
 
         lock.lock()
@@ -63,7 +68,7 @@ enum UploadCancellation {
 
     /// `true`, если загрузка текущей задачи помечена на отмену.
     /// Для `shouldCancel`-замыканий `ChunkedUploadRunner`.
-    static func isCancelledForCurrentTask() -> Bool {
+    public static func isCancelledForCurrentTask() -> Bool {
         guard let id = sessionID else { return false }
         return isCancelled(id)
     }
@@ -71,7 +76,7 @@ enum UploadCancellation {
     /// Проверка для циклов передачи провайдеров: бросает
     /// `CancellationError`, если сессия текущей задачи отменена;
     /// иначе делегирует обычной `Task.checkCancellation()`.
-    static func checkCancellation() throws {
+    public static func checkCancellation() throws {
         if isCancelledForCurrentTask() {
             throw CancellationError()
         }

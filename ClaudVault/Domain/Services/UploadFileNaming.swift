@@ -5,13 +5,13 @@ import Foundation
 /// пользователь задаёт своё имя (например, для скана
 /// `scan_<UUID>.pdf`), подкладывается hard link или копия
 /// во временной директории с нужным именем.
-enum UploadFileNaming {
+public enum UploadFileNaming {
 
     /// Возвращает URL, у которого `lastPathComponent` совпадает с
     /// заданным именем: исходный файл, либо hard link (fallback —
     /// копия) во временной директории. При любой ошибке возвращает
     /// исходный URL — загрузка под исходным именем всё ещё возможна.
-    static func url(for fileURL: URL, desiredName: String) -> URL {
+    public static func url(for fileURL: URL, desiredName: String) -> URL {
         // "/" и ".." внутри имени не должны выводить hard link
         // за пределы временной директории.
         let safeName = SafeFileName.sanitized(desiredName) ?? ""
